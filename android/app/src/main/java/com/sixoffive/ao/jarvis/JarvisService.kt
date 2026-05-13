@@ -188,11 +188,12 @@ class JarvisService : Service() {
             .build()
     }
 
-    private fun micForegroundType(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        else
-            0
+    private fun micForegroundType(): Int {
+        // The FOREGROUND_SERVICE_TYPE_MICROPHONE constant has existed since
+        // API 30. Without it, Android 12+ silently feeds AudioRecord a zero
+        // buffer — the mic capture "works" but every sample is silence.
+        return ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+    }
 
     // --- UI events the activity can observe ---
 
