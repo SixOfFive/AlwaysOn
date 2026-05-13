@@ -35,8 +35,14 @@ class VadSegmenter(
         FloatBuffer.wrap(FloatArray(2 * 1 * 128)),
         stateShape,
     )
+    // Silero's `sr` is a scalar (rank-0 tensor), not a 1-D tensor with one
+    // element. Passing it as [1] crashes ORT with a segfault on ARM.
     private val srTensor: OnnxTensor =
-        OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(SAMPLE_RATE.toLong())), longArrayOf(1))
+        OnnxTensor.createTensor(
+            env,
+            LongBuffer.wrap(longArrayOf(SAMPLE_RATE.toLong())),
+            longArrayOf(),
+        )
 
     private val preRoll: ArrayDeque<ShortArray> = ArrayDeque()
     private val preRollMax: Int = maxOf(1, speechPadMs / CHUNK_MS)
@@ -123,21 +129,30 @@ class VadSegmenter(
             "sr" to srTensor,
         )
         val results = session.run(feeds)
-        val prob = try {
-            val raw = results[0].value
-            when (raw) {
-                is Array<*> -> ((raw[0] as FloatArray)[0])
+        try {
+            val rawOut = results[0].value
+            val prob = when (rawOut) {
+                is Array<*> -> ((rawOut[0] as FloatArray)[0])
                 else -> 0.0f
             }
-        } finally {
-            // results[0] is the prob; results[1] is the new state.
-            val newState = results[1] as OnnxTensor
+
+            // Copy stateN OUT before results.close() — we'd be using freed
+            // memory next iteration otherwise. The state tensor's lifetime
+            // is owned by `results`, not by us.
+            val newStateTensor = results[1] as OnnxTensor
+            val flat = FloatArray(2 * 1 * 128)
+            newStateTensor.floatBuffer.get(flat)
             state.close()
-            state = newState
-            results.close()
+            state = OnnxTensor.createTensor(
+                env,
+                FloatBuffer.wrap(flat),
+                stateShape,
+            )
+            return prob
+        } finally {
             inputTensor.close()
+            results.close()
         }
-        return prob
     }
 
     override fun close() {
