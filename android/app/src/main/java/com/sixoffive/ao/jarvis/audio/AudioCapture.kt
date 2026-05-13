@@ -40,8 +40,11 @@ class AudioCapture {
         )
         val bufBytes = maxOf(minBuf, CHUNK_BYTES * 8)
 
+        // MIC is the rawest audio source; VOICE_RECOGNITION applies system
+        // pre-processing that on some devices mutes the input when no
+        // recognizer is bound, which gave us zero buffers.
         val record = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -58,19 +61,34 @@ class AudioCapture {
         val running = java.util.concurrent.atomic.AtomicBoolean(true)
         val readerThread = thread(name = "audio-capture", isDaemon = true) {
             val buf = ShortArray(CHUNK_SAMPLES)
+            var chunksSinceLog = 0
+            var peakSinceLog = 0
             while (running.get()) {
                 val n = record.read(buf, 0, CHUNK_SAMPLES, AudioRecord.READ_BLOCKING)
                 if (n <= 0) {
                     Log.w(TAG, "AudioRecord.read returned $n")
                     continue
                 }
-                // Drop partial reads — downstream (Silero VAD) is strict
-                // about chunk size and would crash if we emitted them.
-                if (n == CHUNK_SAMPLES) {
-                    trySendOrLog(this, buf.copyOf())
-                } else {
+                if (n != CHUNK_SAMPLES) {
                     Log.w(TAG, "skipping partial chunk of $n samples")
+                    continue
                 }
+
+                // Track peak amplitude to verify mic is actually delivering
+                // sound, independent of any downstream VAD or scaling bugs.
+                var peak = 0
+                for (s in buf) {
+                    val a = if (s < 0) -s.toInt() else s.toInt()
+                    if (a > peak) peak = a
+                }
+                if (peak > peakSinceLog) peakSinceLog = peak
+                chunksSinceLog++
+                if (chunksSinceLog >= 32) {  // ~1s
+                    Log.i(TAG, "mic peak over last ~1s: $peakSinceLog (max 32767)")
+                    chunksSinceLog = 0; peakSinceLog = 0
+                }
+
+                trySendOrLog(this, buf.copyOf())
             }
             Log.i(TAG, "audio-capture thread exiting")
         }
