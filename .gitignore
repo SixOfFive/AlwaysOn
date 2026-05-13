@@ -50,6 +50,7 @@ android/.gradle/
 android/.idea/
 android/build/
 android/app/build/
+android/app/.cxx/
 android/captures/
 android/local.properties
 android/.cxx/
