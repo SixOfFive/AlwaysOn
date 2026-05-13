@@ -76,12 +76,15 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeTranscribe(
     wparams.single_segment   = true;   // one utterance per call — don't try to chunk
     wparams.temperature      = 0.0f;
 
-    if (whisper_full(ctx, wparams, samples.data(), n) != 0) {
-        env->ReleaseStringUTFChars(languageCode, lang);
+    LOGI("whisper_full: starting on %d samples, %d threads, lang=%s",
+         (int)n, wparams.n_threads, lang);
+    const int rc = whisper_full(ctx, wparams, samples.data(), n);
+    LOGI("whisper_full: returned rc=%d", rc);
+    env->ReleaseStringUTFChars(languageCode, lang);
+    if (rc != 0) {
         LOGW("whisper_full failed");
         return env->NewStringUTF("");
     }
-    env->ReleaseStringUTFChars(languageCode, lang);
 
     std::string out;
     const int nSeg = whisper_full_n_segments(ctx);

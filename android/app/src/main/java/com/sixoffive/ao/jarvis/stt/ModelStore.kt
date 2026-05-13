@@ -79,7 +79,9 @@ class ModelStore(private val context: Context) {
 
     companion object {
         private const val TAG = "ModelStore"
-        // Voice-command size class. Bigger options: medium.en, large-v3-turbo.
-        const val DEFAULT_MODEL = "small.en"
+        // tiny.en (39 MB) is dramatically lighter on phone RAM and ~5x faster
+        // than small.en. Accuracy is lower but fine for command-style input.
+        // Bigger options: base.en (74 MB), small.en (244 MB), medium.en (769 MB).
+        const val DEFAULT_MODEL = "tiny.en"
     }
 }
