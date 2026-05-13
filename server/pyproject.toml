@@ -15,6 +15,7 @@ dependencies = [
     "faster-whisper>=1.1",
     "anthropic>=0.40",
     "mcp>=1.0",
+    "ddgs>=8.0",
     "jarvis-shared",
 ]
 

@@ -15,6 +15,7 @@ import re
 
 from jarvis_server.claude import ClaudeRouter
 from jarvis_server.tools import ToolRegistry
+from jarvis_server.tools.search import top_snippet
 from jarvis_server.tools.timer import parse_duration
 
 log = logging.getLogger(__name__)
@@ -74,6 +75,24 @@ class Router:
                     except Exception as exc:  # noqa: BLE001
                         log.exception("fast-path set_timer failed")
                         return f"Something went wrong: {exc}"
+
+        # "search the web for X" / "search for X" / "look up X" — top
+        # DDG snippet, fast and direct. Claude still gets the web_search
+        # tool for use as part of a multi-step answer.
+        m = re.search(
+            r"\b(?:search\s+(?:the\s+web\s+)?(?:for\s+)?|look\s+up\s+|google\s+|ddg\s+)(.+)",
+            text,
+            re.I,
+        )
+        if m:
+            query = m.group(1).strip(" .?!,")
+            if query:
+                log.info("fast path: web_search snippet for %r", query)
+                try:
+                    return await top_snippet(query)
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("fast-path search failed")
+                    return f"Search failed: {exc}"
 
         # Fast path: single-arg tools, with the captured group as the arg.
         for pattern, tool_name, arg_key in _FAST_WITH_ARG:
