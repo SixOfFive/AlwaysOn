@@ -181,12 +181,39 @@ Three terminals (or two + your phone):
 .venv\Scripts\python.exe -m jarvis_client --audio-device 9 --server ws://<server-host>:7333/ws
 ```
 
-Try:
+Try (substitute your `trigger_phrase` for "Computer" if you changed it):
 - "Computer, what time is it?" → fast path, no LLM
 - "Computer, weather?" → fast path (wttr.in)
 - "Computer, set a five minute timer." → fast path
 - "Computer, search the web for current bitcoin price." → fast path snippet
 - "Computer, what was I working on last week?" → LLM → vault tool
+
+### Always-listening mode
+
+If you don't want to say the trigger every utterance, toggle it on:
+
+- **Enable**: "Computer, always mode on" (or "always listen", "enable always mode", "always computer mode")
+- **Disable** (no trigger word needed once it's on): "always mode off" / "disable always mode" / "trigger only" / "stop always listening"
+
+While always-mode is on, every transcribed utterance is treated as a
+command and routed through the LLM. Mic-mute during TTS becomes
+*especially* important here — without it, the assistant's spoken reply
+would itself be transcribed as the next command and you'd loop. The
+default `mute_mic=true` on every `Say` handles that.
+
+### Mic mute during TTS
+
+The server sets `mute_mic: true` on every `Say` message; clients (all
+three) drop mic chunks for the duration of TTS playback so the
+assistant doesn't transcribe its own voice. Audio captured during
+*thinking* and *routing* phases still flows — the server's per-session
+utterance queue keeps them in FIFO order behind any in-flight reply.
+
+If you want barge-in (mic stays hot during TTS, audio is captured for
+the next turn), the server side could set `mute_mic: false` per-Say —
+that's a code change, no config knob yet. The system-prompt rule that
+forbids the model from saying the literal trigger word is a small
+defense-in-depth measure for that case.
 
 ## Configuration
 

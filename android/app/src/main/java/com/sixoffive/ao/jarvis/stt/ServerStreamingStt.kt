@@ -43,6 +43,11 @@ class ServerStreamingStt(
     /** Called ~8x/sec with (peak amplitude 0..32767, VAD prob 0..1).
      *  Used by the UI to render live meters. */
     private val onMetric: ((peak: Int, prob: Float) -> Unit)? = null,
+    /** Returns true while TTS is playing AND the server requested
+     *  mic-mute on that Say. Chunks are dropped entirely (not fed to
+     *  VAD, not sent to the server) so the assistant can't transcribe
+     *  its own voice. */
+    private val isSpeaking: () -> Boolean = { false },
 ) : SpeechToText {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -60,15 +65,13 @@ class ServerStreamingStt(
             var peakSinceMetric = 0
 
             cap.stream(context).collect { chunk ->
-                // The mic stays hot in every state — thinking, routing,
-                // even while TTS is playing back. Audio captured during
-                // those phases gets shipped to the server like normal;
-                // the server's per-session utterance queue keeps them in
-                // FIFO order behind any in-flight reply. The cost is the
-                // assistant occasionally transcribing its own voice as
-                // overheard context (mitigated by the system-prompt rule
-                // that the model must never say the literal trigger
-                // word "computer" in replies).
+                // Drop chunks entirely while TTS is playing (when the
+                // server requested mute_mic on the Say — default true).
+                // Don't feed VAD, don't ship — the mic effectively goes
+                // dark for the spoken reply. Mid-thinking / mid-routing
+                // chunks still flow; the server's utterance queue keeps
+                // them ordered behind any in-flight reply.
+                if (isSpeaking()) return@collect
 
                 // Live mic meter — cheap peak over the chunk.
                 if (onMetric != null) {

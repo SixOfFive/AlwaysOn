@@ -66,13 +66,12 @@ async def run(
 
     ws = await _connect(server_url, client_id or f"{socket.gethostname()}-mic")
 
-    # The mic stays hot in every state — thinking, routing, even while
-    # TTS is playing back. Audio captured during those phases gets
-    # shipped to the server like normal; the server queues utterances
-    # in FIFO order behind any in-flight reply. The system prompt
-    # forbids the model from saying "computer" in replies to prevent
-    # self-triggering loops.
-    reader = asyncio.create_task(_read_server(ws, tts))
+    # `speaking` is set when TTS is playing AND the server requested
+    # mic-mute (mute_mic=true on Say, which is the default). The audio
+    # loop drops chunks at the top while it's set so neither VAD nor
+    # the server ever sees the TTS audio.
+    speaking = asyncio.Event()
+    reader = asyncio.create_task(_read_server(ws, tts, speaking))
 
     banner = (f"\n[stream mode] connected to {server_url}. "
               "Server transcribes, applies trigger, routes. Ctrl-C to stop.\n")
@@ -81,6 +80,8 @@ async def run(
     try:
         while True:
             chunk = await chunks.get()
+            if speaking.is_set():
+                continue
             segment = segmenter.feed(chunk)
             if segment is None:
                 continue
@@ -126,6 +127,7 @@ async def _connect(url: str, client_id: str) -> websockets.ClientConnection:
 async def _read_server(
     ws: websockets.ClientConnection,
     tts: TTS,
+    speaking: asyncio.Event,
 ) -> None:
     try:
         async for raw in ws:
@@ -149,7 +151,12 @@ async def _read_server(
                     continue
                 sys.stdout.write(f"jarvis> {msg.text}\n")
                 sys.stdout.flush()
-                await tts.say(msg.text)
+                if msg.mute_mic:
+                    speaking.set()
+                try:
+                    await tts.say(msg.text)
+                finally:
+                    speaking.clear()
 
             elif isinstance(msg, Thinking):
                 log.info("thinking… %s", msg.note)

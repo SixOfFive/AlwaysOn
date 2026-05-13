@@ -74,6 +74,9 @@ data class Thinking(val note: String = "") : Incoming
 data class Say(
     val text: String,
     @SerialName("audio_url") val audioUrl: String? = null,
+    /** When true (default), the client mutes the mic for the duration
+     *  of TTS playback so the assistant doesn't transcribe its own voice. */
+    @SerialName("mute_mic") val muteMic: Boolean = true,
 ) : Incoming
 
 @Serializable

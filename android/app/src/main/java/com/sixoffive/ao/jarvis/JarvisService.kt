@@ -52,10 +52,12 @@ class JarvisService : Service() {
     private var pipelineJob: Job? = null
     private var transcriptLog: TranscriptLog? = null
     private var classifier: Classifier? = null
-    // Serialize TTS playback so back-to-back Say events don't overlap.
-    // We no longer mute the mic during TTS — see the comments in
-    // ServerStreamingStt and the speech.start() collect block.
+    // Serialize TTS playback so back-to-back Say events don't overlap,
+    // and signal mic-mute to the audio pipeline. `speaking` is true
+    // ONLY when the current Say asked for mute_mic — the server can
+    // choose to keep the mic hot via mute_mic=false on a per-Say basis.
     private val speakLock = Mutex()
+    @Volatile private var speaking = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -148,6 +150,7 @@ class JarvisService : Service() {
                         onMetric = { peak, prob ->
                             _events.tryEmit(UiEvent.AudioMetric(peak, prob))
                         },
+                        isSpeaking = { speaking },
                     )
                 }
             }
@@ -178,7 +181,12 @@ class JarvisService : Service() {
                                 transcriptLog?.say(ev.text)
                                 _events.tryEmit(UiEvent.Said(ev.text))
                                 speakLock.withLock {
-                                    tts?.say(ev.text)
+                                    if (ev.muteMic) speaking = true
+                                    try {
+                                        tts?.say(ev.text)
+                                    } finally {
+                                        speaking = false
+                                    }
                                 }
                             }
                             is JarvisWsClient.Event.Thinking ->
@@ -205,13 +213,11 @@ class JarvisService : Service() {
                 speech.start().collect { /* unused */ }
             } else {
                 // On-device STT engines (whisper, system): collect transcripts
-                // locally, apply the wake-word trigger, send Command. We no
-                // longer drop transcripts captured during TTS — the assistant
-                // hearing itself is a fact of life, and the server's queue
-                // sequences follow-ups correctly. The system prompt forbids
-                // the model from saying "computer" in replies, which is the
-                // main safeguard against self-triggering loops.
+                // locally, apply the wake-word trigger, send Command. Drop
+                // transcripts captured during TTS playback so the assistant
+                // doesn't transcribe its own voice.
                 speech.start().collect { transcript ->
+                    if (speaking) return@collect
                     transcriptLog?.stt(transcript)
                     _events.tryEmit(UiEvent.Transcript(transcript))
 

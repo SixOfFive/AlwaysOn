@@ -81,10 +81,17 @@ class Thinking(BaseModel):
 
 class Say(BaseModel):
     """What the client should speak. If audio_url is set the client fetches and
-    plays it; otherwise the client TTSes text locally."""
+    plays it; otherwise the client TTSes text locally.
+
+    `mute_mic` tells the client to suppress mic capture (drop chunks
+    entirely — don't feed VAD, don't ship to server) for the duration
+    of the TTS playback. Prevents the assistant from transcribing its
+    own voice. Default true; the server flips it false only in the
+    rare "always-hot mic" configurations."""
     type: Literal["say"] = "say"
     text: str
     audio_url: str | None = None
+    mute_mic: bool = True
 
 
 class ErrorMsg(BaseModel):

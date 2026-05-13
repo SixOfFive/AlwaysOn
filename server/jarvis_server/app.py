@@ -84,6 +84,7 @@ async def _build_llm_router(
         model=model_tag,
         base_url=cfg.ollama_url,
         context_length=cfg.ollama_context_length,
+        trigger_phrase=cfg.trigger_phrase,
     )
 
 

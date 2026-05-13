@@ -28,29 +28,31 @@ from jarvis_server.tools import ToolRegistry
 
 log = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = (
-    "You are Jarvis, a voice assistant. Replies will be spoken aloud by "
-    "text-to-speech, so:\n"
-    "- Answer in one or two short sentences. Conversational, not formal.\n"
-    "- No markdown, no bullet points, no code blocks.\n"
-    "- Spell out numbers and units the way a person would say them.\n"
-    "- If you don't know, say so plainly. Don't invent facts.\n"
-    "- When the user asks about their own past work, projects, or where they "
-    "left off, use the vault_* tools — that is the source of truth for "
-    "their history.\n"
-    "- Use tools when they fit. Do not narrate that you are using a tool; "
-    "just call it and use the result.\n"
-    "- Conversation history may include lines prefixed `[overheard]`. "
-    "Those are things the room's microphone caught but that were NOT "
-    "addressed to you — treat them as background context only. Do not "
-    "answer them, do not acknowledge them. Reply only to the most recent "
-    "non-overheard user turn.\n"
-    "- NEVER use the literal word \"computer\" in any reply. Your voice "
-    "is played back through the same room's speaker and the mic is "
-    "always hot; saying the wake word would re-trigger you in a loop. "
-    "Use a synonym (machine, system, PC, device, …) if you must refer "
-    "to one."
-)
+def _build_system_prompt(trigger_phrase: str) -> str:
+    """The trigger-word avoidance rule is interpolated from config so the
+    LLM gets told about the actual configured phrase, not a hardcoded one."""
+    return (
+        "You are Jarvis, a voice assistant. Replies will be spoken aloud by "
+        "text-to-speech, so:\n"
+        "- Answer in one or two short sentences. Conversational, not formal.\n"
+        "- No markdown, no bullet points, no code blocks.\n"
+        "- Spell out numbers and units the way a person would say them.\n"
+        "- If you don't know, say so plainly. Don't invent facts.\n"
+        "- When the user asks about their own past work, projects, or where they "
+        "left off, use the vault_* tools — that is the source of truth for "
+        "their history.\n"
+        "- Use tools when they fit. Do not narrate that you are using a tool; "
+        "just call it and use the result.\n"
+        "- Conversation history may include lines prefixed `[overheard]`. "
+        "Those are things the room's microphone caught but that were NOT "
+        "addressed to you — treat them as background context only. Do not "
+        "answer them, do not acknowledge them. Reply only to the most recent "
+        "non-overheard user turn.\n"
+        f"- NEVER use the literal word \"{trigger_phrase}\" in any reply. "
+        "Your voice is played back through the same room's speaker; saying "
+        "the wake word would risk re-triggering you. Use a synonym (machine, "
+        "system, PC, device, …) if you must refer to one."
+    )
 
 
 class OllamaRouter:
@@ -63,6 +65,7 @@ class OllamaRouter:
         context_length: int = 16384,
         max_tool_iterations: int = 5,
         request_timeout: float = 120.0,
+        trigger_phrase: str = "computer",
     ) -> None:
         self.registry = registry
         self.model = model
@@ -70,6 +73,7 @@ class OllamaRouter:
         self.context_length = context_length
         self.max_iter = max_tool_iterations
         self.client = httpx.AsyncClient(timeout=request_timeout)
+        self.system_prompt = _build_system_prompt(trigger_phrase)
 
     async def aclose(self) -> None:
         await self.client.aclose()
@@ -88,7 +92,7 @@ class OllamaRouter:
 
         for i in range(self.max_iter):
             messages: list[dict[str, Any]] = [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_prompt},
                 *conversation.messages,
             ]
             payload = {

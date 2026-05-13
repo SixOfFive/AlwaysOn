@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from jarvis_server.active_session import ActiveSession
 from jarvis_server.conversation import Conversation
 from jarvis_server.dictation import log_utterance
+from jarvis_server.mode import parse_mode_toggle, reply_for_toggle
 from jarvis_server.router import Router
 from jarvis_server.stt import STT
 from jarvis_server.trigger import extract as extract_trigger
@@ -73,11 +74,14 @@ class Session:
         self.conv = Conversation()
         # FIFO queue of completed utterances awaiting STT + routing. The
         # main loop pushes; a dedicated worker task drains. This is what
-        # lets the user fire off "computer, X" while a previous reply is
-        # still being thought-through — neither the receive loop nor
+        # lets the user fire off another command while a previous reply
+        # is still being thought-through — neither the receive loop nor
         # subsequent utterances block on each other.
         self._utterance_queue: asyncio.Queue[tuple[bytes, str]] = asyncio.Queue()
         self._utterance_worker: asyncio.Task[None] | None = None
+        # When True, every transcribed utterance is routed as a command
+        # without requiring the trigger phrase. User-toggleable by voice.
+        self.always_mode: bool = False
 
     async def run(self) -> None:
         try:
@@ -227,14 +231,15 @@ class Session:
         text = await self.stt.transcribe(pcm)
         await self._send(Transcript(text=text, final=True))
 
-        # If the client streamed audio without doing its own wake-word check
-        # (Wake.keyword == ""), require the literal trigger phrase in the
-        # transcript. This is the Android "always-listening" path. The
-        # Python desktop client, which runs openWakeWord on-device, sends
-        # a non-empty keyword and we route the whole transcript as-is.
+        # Decide which utterances count as commands addressed to us:
+        #   - always_mode on  → everything counts
+        #   - client did wake-word check (Wake.keyword != "") → trust it
+        #   - otherwise → require the literal trigger phrase via extract
         routable: str | None
         pre_trigger: str = ""
-        if wake_keyword:
+        if self.always_mode:
+            routable = text
+        elif wake_keyword:
             routable = text
         else:
             split = extract_trigger(text, self.trigger_phrase)
@@ -265,6 +270,18 @@ class Session:
             log.info("overheard (not routed): %r", text)
             return
 
+        # Voice toggle for always-mode. Runs before any other routing so
+        # the LLM never sees "always mode on" as a command to interpret.
+        toggle = parse_mode_toggle(routable, self.trigger_phrase)
+        if toggle is not None:
+            self.always_mode = toggle
+            reply = reply_for_toggle(toggle, self.trigger_phrase)
+            self.conv.add_user(routable)
+            self.conv.add_assistant_text(reply)
+            log.info("session %s: always_mode -> %s", self.session_id, toggle)
+            await self._send(Say(text=reply))
+            return
+
         # Pre-trigger speech in the SAME utterance is preserved as
         # overheard context so phrases like "Tokyo sucks. Computer,
         # what's the weather there?" can resolve "there" to Tokyo.
@@ -274,7 +291,7 @@ class Session:
 
         # Triggered command. Record the cleaned command (post-trigger
         # extraction) so the LLM sees what was actually asked, not the
-        # whole "computer, ..." preamble.
+        # whole "<trigger>, ..." preamble.
         self.conv.add_user(routable)
         await self._route(routable)
 

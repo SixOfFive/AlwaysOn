@@ -41,7 +41,9 @@ class JarvisWsClient(
     sealed interface Event {
         data class Welcomed(val sessionId: String) : Event
         data class Transcribed(val text: String, val final: Boolean) : Event
-        data class Said(val text: String) : Event
+        /** `muteMic` tells the service to drop mic chunks for the
+         *  duration of TTS playback so it doesn't transcribe its own voice. */
+        data class Said(val text: String, val muteMic: Boolean) : Event
         data class Thinking(val note: String) : Event
         data class Errored(val code: String, val message: String) : Event
         data class Disconnected(val reason: String) : Event
@@ -126,7 +128,7 @@ class JarvisWsClient(
                     ready = true
                     _events.tryEmit(Event.Welcomed(msg.sessionId))
                 }
-                is Say -> _events.tryEmit(Event.Said(msg.text))
+                is Say -> _events.tryEmit(Event.Said(msg.text, msg.muteMic))
                 is Thinking -> _events.tryEmit(Event.Thinking(msg.note))
                 is ErrorMsg -> _events.tryEmit(Event.Errored(msg.code, msg.message))
                 is Transcript -> _events.tryEmit(Event.Transcribed(msg.text, msg.final))
