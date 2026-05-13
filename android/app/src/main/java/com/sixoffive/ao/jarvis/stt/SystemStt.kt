@@ -78,19 +78,33 @@ class SystemStt(private val context: Context) : SpeechToText {
                 RecognizerIntent.EXTRA_LANGUAGE,
                 java.util.Locale.getDefault().toLanguageTag(),
             )
+            // Make the recognizer more patient — Android otherwise cuts you off
+            // after ~half a second of silence, which clips natural pauses.
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                2_000L,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                1_500L,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+                500L,
+            )
         }
         r.startListening(intent)
     }
 
     private fun restartSoon() {
         if (closed) return
-        // Tiny delay so we don't tight-loop on errors. Also lets the system
-        // recognizer fully tear down before we ask for a new session.
+        // Minimal delay — just enough for the system recognizer to tear down
+        // cleanly. Longer delays mean dropped words at the boundary.
         handler.postDelayed({
             recognizer?.destroy()
             recognizer = null
             startSession()
-        }, 150)
+        }, 30)
     }
 
     private val listener = object : RecognitionListener {
