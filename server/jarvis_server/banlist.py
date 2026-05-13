@@ -34,7 +34,12 @@ def _path() -> Path:
 
 
 def read() -> set[str]:
-    """Return the set of banned Ollama tags. Missing file = empty set."""
+    """Return the set of banned Ollama tags. Missing file = empty set.
+
+    Strips inline `# comment` trailers from each line — those are notes
+    the user (or this module) leaves about why a tag was banned, not
+    part of the tag itself.
+    """
     p = _path()
     if not p.is_file():
         return set()
@@ -44,7 +49,13 @@ def read() -> set[str]:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            out.add(line)
+            # Drop inline trailing comments: "gemma4:e4b  # spilled to CPU"
+            # → "gemma4:e4b". Ollama tags can't contain `#`, so this is
+            # always safe.
+            if "#" in line:
+                line = line.split("#", 1)[0].strip()
+            if line:
+                out.add(line)
     except OSError as exc:
         log.warning("banlist %s unreadable: %s", p, exc)
     return out
