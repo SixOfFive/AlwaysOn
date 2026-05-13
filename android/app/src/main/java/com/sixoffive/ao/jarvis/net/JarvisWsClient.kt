@@ -13,6 +13,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Single-connection WebSocket client. Speaks the same JSON protocol as
@@ -31,6 +32,19 @@ class JarvisWsClient(
 
     private var ws: WebSocket? = null
     @Volatile private var ready = false
+
+    // Cumulative byte counters for the upload/download graph. UTF-8
+    // sizes for text frames, raw length for binary. Monotonic until
+    // close(); a 1Hz sampler in JarvisService computes deltas.
+    val bytesSent: AtomicLong = AtomicLong(0)
+    val bytesReceived: AtomicLong = AtomicLong(0)
+
+    private fun sendText(json: String): Boolean {
+        val w = ws ?: return false
+        val ok = w.send(json)
+        if (ok) bytesSent.addAndGet(json.toByteArray(Charsets.UTF_8).size.toLong())
+        return ok
+    }
 
     private val _events = MutableSharedFlow<Event>(
         extraBufferCapacity = 16,
@@ -65,10 +79,8 @@ class JarvisWsClient(
 
     /** Send a Command. No-op if the connection isn't ready yet. */
     fun sendCommand(text: String): Boolean {
-        val w = ws ?: return false
         if (!ready) return false
-        val json = protocolJson.encodeToString(Outgoing.serializer(), Command(text))
-        return w.send(json)
+        return sendText(protocolJson.encodeToString(Outgoing.serializer(), Command(text)))
     }
 
     /** Open an audio utterance. Send raw PCM bytes after this, then
@@ -76,11 +88,9 @@ class JarvisWsClient(
      *  wake-word the client matched on; pass "" to ask the server to
      *  apply its own transcript-based trigger check. */
     fun sendWake(keyword: String = "", confidence: Float = 0.0f): Boolean {
-        val w = ws ?: return false
         if (!ready) return false
         val msg = Wake(keyword, confidence, System.currentTimeMillis())
-        val json = protocolJson.encodeToString(Outgoing.serializer(), msg)
-        return w.send(json)
+        return sendText(protocolJson.encodeToString(Outgoing.serializer(), msg))
     }
 
     /** Send a raw PCM audio chunk (int16 little-endian, 16 kHz mono).
@@ -88,24 +98,22 @@ class JarvisWsClient(
     fun sendAudio(pcm: ByteArray): Boolean {
         val w = ws ?: return false
         if (!ready) return false
-        return w.send(ByteString.of(*pcm))
+        val ok = w.send(ByteString.of(*pcm))
+        if (ok) bytesSent.addAndGet(pcm.size.toLong())
+        return ok
     }
 
     /** Close an audio utterance and ask the server to transcribe. */
     fun sendEndUtterance(): Boolean {
-        val w = ws ?: return false
         if (!ready) return false
-        val json = protocolJson.encodeToString(Outgoing.serializer(), EndUtterance())
-        return w.send(json)
+        return sendText(protocolJson.encodeToString(Outgoing.serializer(), EndUtterance()))
     }
 
     /** Ask the server to drop its conversation history for this
      *  session. Server replies with `ContextCleared` once done. */
     fun sendResetContext(): Boolean {
-        val w = ws ?: return false
         if (!ready) return false
-        val json = protocolJson.encodeToString(Outgoing.serializer(), ResetContext())
-        return w.send(json)
+        return sendText(protocolJson.encodeToString(Outgoing.serializer(), ResetContext()))
     }
 
     private val listener = object : WebSocketListener() {
@@ -117,6 +125,7 @@ class JarvisWsClient(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            bytesReceived.addAndGet(text.toByteArray(Charsets.UTF_8).size.toLong())
             val msg = try {
                 protocolJson.decodeFromString(Incoming.serializer(), text)
             } catch (exc: Exception) {
@@ -138,6 +147,7 @@ class JarvisWsClient(
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            bytesReceived.addAndGet(bytes.size.toLong())
             // server doesn't send binary today
         }
 

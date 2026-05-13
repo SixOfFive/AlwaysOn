@@ -46,16 +46,26 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/start_stop" />
 
+    <com.sixoffive.ao.jarvis.ui.NetGraphView
+        android:id="@+id/net_graph"
+        android:layout_width="0dp"
+        android:layout_height="84dp"
+        android:layout_marginTop="12dp"
+        android:background="#10FFFFFF"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/start_stop" />
+
     <TextView
         android:id="@+id/status"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:fontFamily="monospace"
         android:textSize="12sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/start_stop"
+        app:layout_constraintTop_toBottomOf="@id/net_graph"
         tools:text="idle" />
 
     <!-- Live meters: mic peak + Silero VAD probability -->

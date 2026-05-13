@@ -102,6 +102,8 @@ class MainActivity : AppCompatActivity() {
                             binding.vadMeter.progress =
                                 (event.vadProb.coerceIn(0f, 1f) * 100f).toInt()
                         }
+                        is JarvisService.UiEvent.NetMetric ->
+                            binding.netGraph.push(event.uploadBps, event.downloadBps)
                     }
                 }
             }

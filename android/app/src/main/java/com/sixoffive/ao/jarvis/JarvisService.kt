@@ -27,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -50,6 +51,7 @@ class JarvisService : Service() {
     private var ws: JarvisWsClient? = null
     private var tts: Tts? = null
     private var pipelineJob: Job? = null
+    private var netSamplerJob: Job? = null
     private var transcriptLog: TranscriptLog? = null
     private var classifier: Classifier? = null
     // Serialize TTS playback so back-to-back Say events don't overlap,
@@ -229,11 +231,38 @@ class JarvisService : Service() {
                 }
             }
         }
+
+        // 1 Hz network throughput sampler. Reads the ws client's
+        // monotonic byte counters, computes per-second deltas, emits
+        // them as UiEvent.NetMetric for the graph view in the UI.
+        netSamplerJob = scope.launch {
+            var lastSent = 0L
+            var lastReceived = 0L
+            // Seed with the connection's starting counters so the very
+            // first sample doesn't include hello-handshake bytes.
+            client?.let {
+                lastSent = it.bytesSent.get()
+                lastReceived = it.bytesReceived.get()
+            }
+            while (true) {
+                delay(1000L)
+                val c = ws ?: continue
+                val sent = c.bytesSent.get()
+                val received = c.bytesReceived.get()
+                val upBps = (sent - lastSent).coerceAtLeast(0)
+                val downBps = (received - lastReceived).coerceAtLeast(0)
+                lastSent = sent
+                lastReceived = received
+                _events.tryEmit(UiEvent.NetMetric(upBps, downBps))
+            }
+        }
     }
 
     private fun stopSelfCleanly() {
         pipelineJob?.cancel()
         pipelineJob = null
+        netSamplerJob?.cancel()
+        netSamplerJob = null
         stt?.close(); stt = null
         ws?.close(); ws = null
         tts?.shutdown(); tts = null
@@ -324,6 +353,9 @@ class JarvisService : Service() {
         /** Live meter — peak amplitude (0..32767) and VAD prob (0..1).
          *  Emitted ~8 Hz while the service is listening. */
         data class AudioMetric(val peak: Int, val vadProb: Float) : UiEvent
+        /** WebSocket throughput — bytes/sec each direction, sampled at
+         *  1 Hz. Drives the network strip-chart in the UI. */
+        data class NetMetric(val uploadBps: Long, val downloadBps: Long) : UiEvent
         /** Server confirmed the reset-context request — MainActivity
          *  should wipe its transcript log. */
         object ContextCleared : UiEvent
