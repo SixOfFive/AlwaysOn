@@ -61,10 +61,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.status.text = if (modelStore.isCached(ModelStore.DEFAULT_MODEL))
-            "idle (model ready)"
-        else
-            "idle (will download model on first start)"
+        val sttReady = modelStore.isCached(ModelStore.DEFAULT_MODEL)
+        val clReady = modelStore.classifierIsCached()
+        binding.status.text = when {
+            sttReady && clReady -> "idle (models ready)"
+            sttReady -> "idle (will download classifier on first start)"
+            clReady -> "idle (will download STT model on first start)"
+            else -> "idle (will download both models on first start)"
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -108,28 +112,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureModelThenStart() {
-        val name = ModelStore.DEFAULT_MODEL
-        if (modelStore.isCached(name)) {
+        val sttName = ModelStore.DEFAULT_MODEL
+        val needSt = !modelStore.isCached(sttName)
+        val needCl = !modelStore.classifierIsCached()
+        if (!needSt && !needCl) {
             startListening()
             return
         }
-        // Need to download first. Block the Start button until done.
         binding.startStop.isEnabled = false
-        binding.status.text = "downloading ggml-$name.bin…"
         downloadJob?.cancel()
         downloadJob = lifecycleScope.launch {
-            modelStore.download(name)
-                .catch { exc ->
-                    binding.status.text = "model download failed: ${exc.message}"
-                    binding.startStop.isEnabled = true
-                }
-                .collect { pct ->
-                    binding.status.text = "downloading ggml-$name.bin… $pct%"
-                    if (pct >= 100) {
+            if (needSt) {
+                binding.status.text = "downloading STT model (ggml-$sttName)…"
+                modelStore.download(sttName)
+                    .catch { exc ->
+                        binding.status.text = "STT model failed: ${exc.message}"
                         binding.startStop.isEnabled = true
-                        startListening()
+                        return@catch
                     }
-                }
+                    .collect { pct ->
+                        binding.status.text = "downloading STT model… $pct%"
+                    }
+            }
+            if (needCl) {
+                binding.status.text = "downloading classifier (Qwen 0.5B)…"
+                modelStore.downloadClassifier()
+                    .catch { exc ->
+                        binding.status.text = "classifier model failed: ${exc.message}"
+                        binding.startStop.isEnabled = true
+                        return@catch
+                    }
+                    .collect { pct ->
+                        binding.status.text = "downloading classifier… $pct%"
+                    }
+            }
+            binding.startStop.isEnabled = true
+            startListening()
         }
     }
 

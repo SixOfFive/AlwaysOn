@@ -68,15 +68,36 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(whisper)
 
+# --- llama.cpp for on-device intent classification ---------------------------
+# Pulled second so it sees whisper's already-defined ggml targets and skips
+# adding a duplicate. Both whisper.cpp and llama.cpp guard their internal
+# add_subdirectory(ggml) with `if (NOT TARGET ggml)`.
+set(LLAMA_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON   OFF CACHE BOOL "" FORCE)
+set(LLAMA_CURL           OFF CACHE BOOL "" FORCE)
+set(LLAMA_STANDALONE     OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    llama
+    GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
+    GIT_TAG        b4404
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(llama)
+
 # --- our JNI library --------------------------------------------------------
 
 add_library(jarvis_native SHARED
     whisper_jni.cpp
+    llama_jni.cpp
 )
 
 target_link_libraries(jarvis_native
     PRIVATE
         whisper
+        llama
         android
         log
 )

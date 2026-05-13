@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.sixoffive.ao.jarvis.classifier.Classifier
 import com.sixoffive.ao.jarvis.net.JarvisWsClient
 import com.sixoffive.ao.jarvis.stt.ModelStore
 import com.sixoffive.ao.jarvis.stt.SpeechToText
@@ -49,6 +50,7 @@ class JarvisService : Service() {
     private var tts: Tts? = null
     private var pipelineJob: Job? = null
     private var transcriptLog: TranscriptLog? = null
+    private var classifier: Classifier? = null
     private val speakLock = Mutex()  // serialize TTS, drop transcripts while speaking
     @Volatile private var speaking = false
 
@@ -78,6 +80,24 @@ class JarvisService : Service() {
 
         transcriptLog = TranscriptLog(applicationContext)
         tts = Tts(applicationContext)
+
+        // Load the intent classifier in parallel with the rest of the
+        // pipeline coming up; the first transcripts can fall back to the
+        // regex trigger until classifier is ready.
+        scope.launch {
+            val store = ModelStore(applicationContext)
+            if (!store.classifierIsCached()) {
+                Log.w(TAG, "classifier model not present — using regex fallback")
+                return@launch
+            }
+            val cls = Classifier.load(store.classifierFile.absolutePath)
+            if (cls == null) {
+                Log.w(TAG, "classifier failed to load — using regex fallback")
+                return@launch
+            }
+            classifier = cls
+            _events.tryEmit(UiEvent.Status("classifier loaded"))
+        }
         val client = if (serverUrl.isNotBlank()) {
             JarvisWsClient(serverUrl, clientId = Build.MODEL ?: "android-mic").also { it.connect() }
         } else {
@@ -138,7 +158,7 @@ class JarvisService : Service() {
                 transcriptLog?.stt(transcript)
                 _events.tryEmit(UiEvent.Transcript(transcript))
 
-                val cmd = Trigger.extract(transcript) ?: return@collect
+                val cmd = decideCommand(transcript) ?: return@collect
                 transcriptLog?.cmd(cmd)
                 _events.tryEmit(UiEvent.Triggered(cmd))
                 Log.i(TAG, "trigger -> $cmd")
@@ -153,9 +173,29 @@ class JarvisService : Service() {
         stt?.close(); stt = null
         ws?.close(); ws = null
         tts?.shutdown(); tts = null
+        classifier?.close(); classifier = null
         transcriptLog = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** Decide whether [transcript] is addressed to Jarvis. Returns the
+     *  command text to dispatch, or null to ignore. Uses the LLM
+     *  classifier when available; falls back to the regex trigger. */
+    private suspend fun decideCommand(transcript: String): String? {
+        val cls = classifier
+        if (cls != null) {
+            return when (cls.classify(transcript)) {
+                Classifier.Result.Yes -> {
+                    // Strip a leading "jarvis" / "hey jarvis" if the user
+                    // included one, so the server gets just the command.
+                    Trigger.extract(transcript) ?: transcript
+                }
+                Classifier.Result.No -> null
+            }
+        }
+        // No classifier loaded — regex fallback.
+        return Trigger.extract(transcript)
     }
 
     override fun onDestroy() {

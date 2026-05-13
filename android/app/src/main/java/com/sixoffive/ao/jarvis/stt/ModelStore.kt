@@ -29,17 +29,31 @@ class ModelStore(private val context: Context) {
         return f.exists() && f.length() > 1_000_000  // sanity: > 1 MB
     }
 
+    /** Path on disk for the classifier LLM GGUF. */
+    val classifierFile: File = File(modelsDir, CLASSIFIER_FILENAME)
+    fun classifierIsCached(): Boolean =
+        classifierFile.exists() && classifierFile.length() > 50_000_000  // > 50 MB
+
+    /** Streams 0..100 just like [download]. */
+    fun downloadClassifier(): Flow<Int> = downloadFromUrl(CLASSIFIER_URL, classifierFile)
+
     /** Streams progress 0..100. Final emission of 100 means file is ready. */
-    fun download(name: String): Flow<Int> = flow {
-        val target = modelFile(name)
-        if (isCached(name)) {
+    fun download(name: String): Flow<Int> =
+        downloadFromUrl(
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$name.bin",
+            modelFile(name),
+        )
+
+    /** Internal helper — generic GET-to-file with percentage emissions. */
+    private fun downloadFromUrl(urlStr: String, target: File): Flow<Int> = flow {
+        if (target.exists() && target.length() > 1_000_000) {
             emit(100)
             return@flow
         }
-        val tmp = File(modelsDir, "ggml-$name.bin.part")
+        val tmp = File(target.parentFile, target.name + ".part")
         if (tmp.exists()) tmp.delete()
 
-        val url = URL("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$name.bin")
+        val url = URL(urlStr)
         Log.i(TAG, "downloading $url -> $tmp")
 
         val conn = url.openConnection().apply {
@@ -73,7 +87,7 @@ class ModelStore(private val context: Context) {
             tmp.delete()
             throw java.io.IOException("could not rename ${tmp.name} to ${target.name}")
         }
-        Log.i(TAG, "downloaded $name: ${target.length() / 1_000_000} MB")
+        Log.i(TAG, "downloaded ${target.name}: ${target.length() / 1_000_000} MB")
         emit(100)
     }.flowOn(Dispatchers.IO)
 
@@ -87,5 +101,13 @@ class ModelStore(private val context: Context) {
         //   q5_1:    tiny.en-q5_1, base.en-q5_1, small.en-q5_1
         //   q4_0:    even faster, lossier
         const val DEFAULT_MODEL = "base.en-q5_1"
+
+        // On-device intent classifier model. Qwen2.5-0.5B-Instruct at Q5_K_M:
+        // ~400 MB, runs in ~300 MB RAM, fast enough to classify a transcript
+        // in well under a second on a phone.
+        private const val CLASSIFIER_FILENAME = "qwen2.5-0.5b-instruct-q5_k_m.gguf"
+        private const val CLASSIFIER_URL =
+            "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/" +
+                CLASSIFIER_FILENAME
     }
 }
