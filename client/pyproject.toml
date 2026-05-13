@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jarvis-client"
+version = "0.0.1"
+description = "Voice-assistant client: mic, wake word, VAD, TTS."
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=13",
+    "pydantic>=2.6",
+    "jarvis-shared",
+]
+
+[project.scripts]
+jarvis-client = "jarvis_client.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jarvis_client"]
+
+[tool.uv.sources]
+jarvis-shared = { path = "../shared", editable = true }

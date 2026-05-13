@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jarvis-server"
+version = "0.0.1"
+description = "Voice-assistant brain: STT, intent router, tools, Claude."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.6",
+    "jarvis-shared",
+]
+
+[project.scripts]
+jarvis-server = "jarvis_server.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jarvis_server"]
+
+[tool.uv.sources]
+jarvis-shared = { path = "../shared", editable = true }
