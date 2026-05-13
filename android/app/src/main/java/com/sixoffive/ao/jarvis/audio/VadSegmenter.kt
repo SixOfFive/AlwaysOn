@@ -48,6 +48,14 @@ class VadSegmenter(
             longArrayOf(),
         )
 
+    // Silero v5 expects a 64-sample (for 16 kHz) "context" window prepended
+    // to each chunk so the model sees a continuous waveform across calls.
+    // See silero-vad utils_vad.py: x = torch.cat([self._context, x], dim=1).
+    // Without this, every chunk looks discontinuous and the model produces
+    // near-zero speech probabilities even on loud speech.
+    private val contextSize = 64
+    private var context = FloatArray(contextSize)
+
     private val preRoll: ArrayDeque<ShortArray> = ArrayDeque()
     private val preRollMax: Int = maxOf(1, speechPadMs / CHUNK_MS)
 
@@ -127,22 +135,31 @@ class VadSegmenter(
         silentStreakMs = 0
         segmentMs = 0
         preRoll.clear()
-        // Reset Silero state between utterances.
+        // Reset Silero state and context between utterances.
         state.close()
         state = OnnxTensor.createTensor(
             env,
             FloatBuffer.wrap(FloatArray(2 * 1 * 128)),
             stateShape,
         )
+        context = FloatArray(contextSize)
         return out
     }
 
     private fun run(chunk: ShortArray): Float {
-        val input = FloatArray(chunk.size) { i -> chunk[i].toInt().toFloat() / 32768.0f }
+        // Build [context(64) || chunk(512)] = 576 samples, float32 [-1, 1].
+        val input = FloatArray(contextSize + chunk.size)
+        System.arraycopy(context, 0, input, 0, contextSize)
+        for (i in chunk.indices) {
+            input[contextSize + i] = chunk[i].toInt().toFloat() / 32768.0f
+        }
+        // Carry the last 64 samples forward as the next call's context.
+        System.arraycopy(input, input.size - contextSize, context, 0, contextSize)
+
         val inputTensor = OnnxTensor.createTensor(
             env,
             FloatBuffer.wrap(input),
-            longArrayOf(1, chunk.size.toLong()),
+            longArrayOf(1, input.size.toLong()),
         )
         val feeds = mapOf(
             "input" to inputTensor,
