@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 
+from jarvis_server import fastpath
 from jarvis_server.conversation import Conversation
 from jarvis_server.ollama_router import OllamaRouter
 from jarvis_server.tools import ToolRegistry
@@ -61,6 +62,16 @@ class Router:
         text = transcript.strip()
         if not text:
             reply = "I didn't catch that."
+            conversation.add_assistant_text(reply)
+            return reply
+
+        # New deterministic fast-paths (math, units, chitchat, repeat,
+        # wikipedia, dice, etc). See fastpath.py. Returns (handler_name,
+        # reply) on match; None otherwise.
+        hit = await fastpath.try_all(text, conversation, self.registry, self.llm)
+        if hit is not None:
+            name, reply = hit
+            log.info("fast path: %s", name)
             conversation.add_assistant_text(reply)
             return reply
 

@@ -72,9 +72,9 @@ ao/
 ### `server/` — jarvis-server (FastAPI on port 7333)
 - **STT**: faster-whisper, CUDA by default. NVIDIA pip-wheel DLLs are
   registered automatically via `_cuda.py` (Windows only).
-- **Router**: regex fast-path for `get_time`, `get_date`, `get_weather`,
-  `set_timer`, `append_note`, `wake_on_lan`, `web_search`; everything
-  else falls through to the LLM.
+- **Router**: regex fast-paths short-circuit the LLM for queries that
+  don't need it. See [Fast paths](#fast-paths) below for the full list.
+  Everything that doesn't match falls through to the LLM.
 - **OllamaRouter**: talks `/api/chat` with OpenAI-style `tools=[...]`.
   Auto-pulls the model on startup if missing.
 - **Catalog**: downloads
@@ -214,6 +214,42 @@ the next turn), the server side could set `mute_mic: false` per-Say —
 that's a code change, no config knob yet. The system-prompt rule that
 forbids the model from saying the literal trigger word is a small
 defense-in-depth measure for that case.
+
+## Fast paths
+
+Whatever the LLM doesn't need to think about, it shouldn't. Each fast
+path is a regex-anchored handler in [`server/jarvis_server/fastpath.py`](server/jarvis_server/fastpath.py)
+(deterministic stuff) or `server/jarvis_server/router.py` (tool-backed).
+A handler returns sub-100 ms; the LLM round-trip on a 7B-class local
+model is multiple seconds. Order matters: more specific patterns run
+first, the LLM is the safety net for anything that doesn't match.
+
+Substitute your `trigger_phrase` for "Computer" if you changed it.
+
+| Category | Trigger examples | What it does |
+|---|---|---|
+| **Time** | "Computer, what time is it?" | tool: `get_time` |
+| **Date** | "Computer, what's the date?" / "what day is it" | tool: `get_date` |
+| **Weather** | "Computer, what's the weather?" / "weather?" | tool: `get_weather` (default location only — anything more specific falls to LLM with conversation context) |
+| **Timer** | "Computer, set a five minute timer" / "30 second timer" | tool: `set_timer` |
+| **Note** | "Computer, note: pick up milk" / "remind me to call mom" | tool: `append_note` |
+| **Wake-on-LAN** | "Computer, wake bigiron" / "boot the nuc" | tool: `wake_on_lan` (host from `[wol].hosts`) |
+| **Web search** | "Computer, search for X" / "look up X" / "google X" | top DDG snippet via `web_search.top_snippet` |
+| **Math** | "what's 5 plus 7", "square root of 9", "25 percent of 80", "7 squared", "10 to the power of 3", "5 divided by 2" | local `math` module; `+`, `-`, `*`, `/`, `**`, sqrt, percent, squared, cubed |
+| **Unit conversion** | "convert 5 miles to km", "10 pounds in kg", "180 fahrenheit to celsius" | hardcoded tables for length, weight, temperature |
+| **Wikipedia** | "tell me about Alan Turing", "who was Marie Curie", "who's Nikola Tesla" | reuses the `wikipedia_summary` tool; trims to 2 sentences for TTS |
+| **Date math** | "in 3 days", "next Friday", "how many days until Saturday" | stdlib `datetime` |
+| **Dice / random** | "flip a coin", "roll a die", "2d6", "d20", "pick a number between 1 and 100" | `random` module |
+| **Spelling** | "how do you spell python", "spell antidisestablishmentarianism" | letter-by-letter for single words ≤30 chars |
+| **Chit-chat** | "hi", "thanks", "good morning", "stop", "never mind", "okay" | small static replies, randomized for variety |
+| **Help** | "what can you do", "help", "list your tools" | static capability summary |
+| **Repeat last** | "say that again", "repeat", "what did you say" | re-speaks the most recent assistant turn from conversation history |
+| **Model info** | "what model are you running", "which LLM", "model name" | reads `OllamaRouter.model` |
+
+If anything misfires (a fast path catches a sentence it shouldn't, or
+misses one it should), the regex lives in `fastpath.py` — hand-edit and
+restart. The handlers are explicitly conservative; preferring a false
+negative (fall through to LLM) over a false positive (wrong answer).
 
 ## Configuration
 
@@ -453,12 +489,17 @@ SharedPreferences). Engine defaults to `ENGINE_SERVER`; flip to
 
 ### Works
 - Server STT on CUDA Whisper large-v3 (~300 ms for a 3 s utterance)
-- Server-side trigger filter ("computer") with on-device fallback
-- Ollama tool-calling via catalog-picked model
+- Server-side trigger filter (configurable phrase) with on-device fallback
+- Ollama tool-calling via catalog-picked model, auto-pulled, kept
+  resident in VRAM (`keep_alive=-1`)
+- Deterministic fast paths skip the LLM for time, date, weather, timer,
+  notes, web search, wake-on-LAN, math, unit conversion, Wikipedia,
+  date math, dice/random, spelling, chit-chat, help, repeat, model info
 - Built-in tools: time, date, weather, timer, notes, wikipedia,
   wake-on-LAN, web search, save-code
 - Obsidian vault MCP integration (list recent, semantic search, read)
 - Dictation log: every transcript persists to a daily Markdown file
+- Always-listening mode toggleable by voice
 - Python clients on Windows + Linux in stream mode
 - Android client in `ENGINE_SERVER` mode
 - Mic mutes during TTS so the assistant doesn't transcribe itself
