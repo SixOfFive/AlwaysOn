@@ -72,10 +72,14 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeTranscribe(
     wparams.print_special    = false;
     wparams.translate        = false;
     wparams.language         = lang;
+    // For short command-style utterances, leave suppress_blank off so the
+    // model returns something for ~1s clips. The Python client doesn't gate
+    // on this either. We trim whitespace on the Kotlin side.
     wparams.no_context       = true;
     wparams.single_segment   = false;
-    wparams.suppress_blank   = true;
+    wparams.suppress_blank   = false;
     wparams.temperature      = 0.0f;
+    wparams.no_speech_thold  = 0.3f;  // be more forgiving than the 0.6 default
 
     if (whisper_full(ctx, wparams, samples.data(), n) != 0) {
         env->ReleaseStringUTFChars(languageCode, lang);
@@ -86,9 +90,11 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeTranscribe(
 
     std::string out;
     const int nSeg = whisper_full_n_segments(ctx);
+    LOGI("whisper_full -> %d segments", nSeg);
     for (int i = 0; i < nSeg; ++i) {
         const char* t = whisper_full_get_segment_text(ctx, i);
         if (t) {
+            LOGI("  seg[%d]: %s", i, t);
             if (!out.empty()) out += ' ';
             out += t;
         }
