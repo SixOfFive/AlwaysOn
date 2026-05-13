@@ -79,9 +79,10 @@ class ModelStore(private val context: Context) {
 
     companion object {
         private const val TAG = "ModelStore"
-        // tiny.en (39 MB) is dramatically lighter on phone RAM and ~5x faster
-        // than small.en. Accuracy is lower but fine for command-style input.
-        // Bigger options: base.en (74 MB), small.en (244 MB), medium.en (769 MB).
-        const val DEFAULT_MODEL = "tiny.en"
+        // base.en (74 MB) — meaningfully more accurate than tiny.en, still
+        // lean on phone RAM, ~2x slower than tiny. Sweet spot for command
+        // recognition on a typical Android phone.
+        // Other options: tiny.en (39 MB), small.en (244 MB), medium.en (769 MB).
+        const val DEFAULT_MODEL = "base.en"
     }
 }
