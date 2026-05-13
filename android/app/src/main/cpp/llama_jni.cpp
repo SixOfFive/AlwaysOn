@@ -6,6 +6,10 @@
 // YES or NO. The model is fixed; learning happens by curating the
 // few-shot example pool on the Kotlin side and inlining it into the
 // prompt.
+//
+// API note: uses the model-handle style (llama_token_*(model, ...))
+// that's stable across llama.cpp versions through our pinned b4404,
+// rather than the newer llama_vocab opaque-type API.
 
 #include <jni.h>
 #include <android/log.h>
@@ -35,12 +39,12 @@ void ensure_backend_init() {
     }
 }
 
-std::vector<llama_token> tokenize(const llama_vocab* vocab, const std::string& text, bool add_bos) {
-    int n = -llama_tokenize(vocab, text.c_str(), (int)text.size(),
+std::vector<llama_token> tokenize(const llama_model* model, const std::string& text, bool add_bos) {
+    int n = -llama_tokenize(model, text.c_str(), (int)text.size(),
                             nullptr, 0, add_bos, /*parse_special*/ true);
     if (n <= 0) return {};
     std::vector<llama_token> out(n);
-    int actual = llama_tokenize(vocab, text.c_str(), (int)text.size(),
+    int actual = llama_tokenize(model, text.c_str(), (int)text.size(),
                                 out.data(), n, add_bos, /*parse_special*/ true);
     if (actual < 0) return {};
     out.resize(actual);
@@ -61,10 +65,10 @@ Java_com_sixoffive_ao_jarvis_classifier_LlamaNative_nativeInit(
     llama_model_params mp = llama_model_default_params();
     mp.n_gpu_layers = 0;
 
-    llama_model* model = llama_model_load_from_file(path, mp);
+    llama_model* model = llama_load_model_from_file(path, mp);
     env->ReleaseStringUTFChars(modelPath, path);
     if (!model) {
-        LOGE("llama_model_load_from_file returned null");
+        LOGE("llama_load_model_from_file returned null");
         return 0;
     }
 
@@ -74,10 +78,10 @@ Java_com_sixoffive_ao_jarvis_classifier_LlamaNative_nativeInit(
     cp.n_threads = 2;
     cp.n_threads_batch = 2;
 
-    llama_context* ctx = llama_init_from_model(model, cp);
+    llama_context* ctx = llama_new_context_with_model(model, cp);
     if (!ctx) {
-        LOGE("llama_init_from_model returned null");
-        llama_model_free(model);
+        LOGE("llama_new_context_with_model returned null");
+        llama_free_model(model);
         return 0;
     }
     auto* h = new LlamaHandle{model, ctx};
@@ -91,7 +95,7 @@ Java_com_sixoffive_ao_jarvis_classifier_LlamaNative_nativeFree(
     auto* h = reinterpret_cast<LlamaHandle*>(handle);
     if (!h) return;
     if (h->ctx)   llama_free(h->ctx);
-    if (h->model) llama_model_free(h->model);
+    if (h->model) llama_free_model(h->model);
     delete h;
 }
 
@@ -112,17 +116,13 @@ Java_com_sixoffive_ao_jarvis_classifier_LlamaNative_nativeGenerate(
     std::string prompt(p);
     env->ReleaseStringUTFChars(jprompt, p);
 
-    const llama_vocab* vocab = llama_model_get_vocab(h->model);
-    auto tokens = tokenize(vocab, prompt, /*add_bos*/ true);
+    auto tokens = tokenize(h->model, prompt, /*add_bos*/ true);
     if (tokens.empty()) {
         LOGW("tokenize returned empty for prompt of %zu chars", prompt.size());
         return env->NewStringUTF("");
     }
 
-    // Reset KV cache so prompts don't bleed across calls. llama.cpp at this
-    // tag exposes both names depending on build flags; the modern one is
-    // llama_memory_clear via llama_get_memory(). For our pinned b4404 we
-    // use llama_kv_cache_clear which the public header still declares.
+    // Reset KV cache so prompts don't bleed across calls.
     llama_kv_cache_clear(h->ctx);
 
     llama_batch batch = llama_batch_get_one(tokens.data(), (int32_t)tokens.size());
@@ -136,14 +136,15 @@ Java_com_sixoffive_ao_jarvis_classifier_LlamaNative_nativeGenerate(
     llama_sampler* sampler = llama_sampler_chain_init(sparams);
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
 
+    const llama_token eos = llama_token_eos(h->model);
     std::string out;
     llama_token cur = 0;
     for (int i = 0; i < maxTokens; ++i) {
         cur = llama_sampler_sample(sampler, h->ctx, -1);
-        if (llama_vocab_is_eog(vocab, cur)) break;
+        if (cur == eos || llama_token_is_eog(h->model, cur)) break;
 
         char piece[256];
-        int n = llama_token_to_piece(vocab, cur, piece, sizeof(piece), 0, /*special*/ false);
+        int n = llama_token_to_piece(h->model, cur, piece, sizeof(piece), 0, /*special*/ false);
         if (n > 0) out.append(piece, n);
 
         llama_batch nb = llama_batch_get_one(&cur, 1);
