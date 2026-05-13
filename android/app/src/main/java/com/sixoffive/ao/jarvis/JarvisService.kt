@@ -84,7 +84,12 @@ class JarvisService : Service() {
 
         val speech: SpeechToText = when (engine) {
             ENGINE_SYSTEM -> SystemStt(applicationContext)
-            else -> WhisperStt(applicationContext)
+            else -> WhisperStt(
+                applicationContext,
+                onMetric = { peak, prob ->
+                    _events.tryEmit(UiEvent.AudioMetric(peak, prob))
+                },
+            )
         }
         stt = speech
 
@@ -202,6 +207,9 @@ class JarvisService : Service() {
         data class Triggered(val command: String) : UiEvent
         data class Said(val text: String) : UiEvent
         data class Status(val text: String) : UiEvent
+        /** Live meter — peak amplitude (0..32767) and VAD prob (0..1).
+         *  Emitted ~8 Hz while the service is listening. */
+        data class AudioMetric(val peak: Int, val vadProb: Float) : UiEvent
     }
 
     companion object {

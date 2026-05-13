@@ -1,0 +1,88 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-src/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 147,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 163,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 171,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"_deps/whisper-build/src/libwhisper.a"
+			],
+			"targetId" : "whisper::@042bb418fb5bf6c59093",
+			"targetIndex" : 4,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				"C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-src/include/whisper.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/whisper",
+			"paths" : 
+			[
+				"C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-build/whisper-config.cmake",
+				"C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-build/whisper-version.cmake"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/pkgconfig",
+			"paths" : 
+			[
+				"C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-build/whisper.pc"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/whisper-build",
+		"source" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-src"
+	}
+}

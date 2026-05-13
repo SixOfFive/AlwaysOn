@@ -1,0 +1,15 @@
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\include\ggml.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\include\ggml-alloc.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\include\ggml-backend.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\include\ggml-cpp.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\include\ggml-opt.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-threading.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-quants.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\ggml-cpu-aarch64.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\ggml-cpu-hbm.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\ggml-cpu-quants.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\ggml-cpu-traits.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\amx\amx.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\amx\mmq.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\ggml\src\ggml-cpu\ggml-cpu-impl.h
+C:\Users\sixoffive\Documents\AO\android\app\.cxx\Debug\4l32161y\arm64-v8a\_deps\whisper-src\include\whisper.h

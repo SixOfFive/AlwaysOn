@@ -78,6 +78,17 @@ class MainActivity : AppCompatActivity() {
                             appendLine("jarvis> ${event.text}")
                         is JarvisService.UiEvent.Status ->
                             binding.status.text = event.text
+                        is JarvisService.UiEvent.AudioMetric -> {
+                            // peak is 0..32767. Use a log-ish curve so quiet
+                            // speech still moves the bar instead of squashing
+                            // into the bottom 5%.
+                            val micPct = ((event.peak.coerceAtLeast(1)
+                                .toFloat() / 32767f).coerceAtMost(1f)
+                                .let { kotlin.math.sqrt(it) } * 100f).toInt()
+                            binding.micMeter.progress = micPct
+                            binding.vadMeter.progress =
+                                (event.vadProb.coerceIn(0f, 1f) * 100f).toInt()
+                        }
                     }
                 }
             }

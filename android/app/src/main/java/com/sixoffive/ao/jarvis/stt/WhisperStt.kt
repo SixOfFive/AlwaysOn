@@ -29,6 +29,9 @@ class WhisperStt(
     private val context: Context,
     private val modelName: String = ModelStore.DEFAULT_MODEL,
     private val language: String = "en",
+    /** Called ~10x/sec with (peak amplitude 0..32767, VAD prob 0..1).
+     *  Used by the UI to render live meters. */
+    private val onMetric: ((peak: Int, prob: Float) -> Unit)? = null,
 ) : SpeechToText {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -66,7 +69,24 @@ class WhisperStt(
             val cap = AudioCapture().also { capture = it }
             val seg = VadSegmenter(context).also { segmenter = it }
 
+            var chunksSinceMetric = 0
+            var peakSinceMetric = 0
             cap.stream(context).collect { chunk ->
+                // Cheap peak scan for the live meter.
+                if (onMetric != null) {
+                    for (s in chunk) {
+                        val a = if (s < 0) -s.toInt() else s.toInt()
+                        if (a > peakSinceMetric) peakSinceMetric = a
+                    }
+                    chunksSinceMetric++
+                    // Emit every ~4 chunks (~128 ms) → ~8 Hz UI refresh.
+                    if (chunksSinceMetric >= 4) {
+                        onMetric.invoke(peakSinceMetric, seg.lastProb)
+                        chunksSinceMetric = 0
+                        peakSinceMetric = 0
+                    }
+                }
+
                 val segment = try {
                     seg.feed(chunk)
                 } catch (exc: Throwable) {

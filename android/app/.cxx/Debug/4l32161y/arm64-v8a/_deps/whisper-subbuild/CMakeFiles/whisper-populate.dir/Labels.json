@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate-complete.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-build.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-configure.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-download.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-install.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-mkdir.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-patch.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-test.rule"
+		},
+		{
+			"file" : "C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"whisper-populate"
+		],
+		"name" : "whisper-populate"
+	}
+}

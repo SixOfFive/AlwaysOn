@@ -47,6 +47,56 @@
         app:layout_constraintTop_toBottomOf="@id/start_stop"
         tools:text="idle" />
 
+    <!-- Live meters: mic peak + Silero VAD probability -->
+
+    <TextView
+        android:id="@+id/mic_label"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:fontFamily="monospace"
+        android:text="mic"
+        android:textSize="11sp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/status" />
+
+    <ProgressBar
+        android:id="@+id/mic_meter"
+        style="@android:style/Widget.Material.ProgressBar.Horizontal"
+        android:layout_width="0dp"
+        android:layout_height="14dp"
+        android:layout_marginStart="8dp"
+        android:max="100"
+        android:progress="0"
+        app:layout_constraintBottom_toBottomOf="@id/mic_label"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/mic_label"
+        app:layout_constraintTop_toTopOf="@id/mic_label" />
+
+    <TextView
+        android:id="@+id/vad_label"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="monospace"
+        android:text="vad"
+        android:textSize="11sp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/mic_label" />
+
+    <ProgressBar
+        android:id="@+id/vad_meter"
+        style="@android:style/Widget.Material.ProgressBar.Horizontal"
+        android:layout_width="0dp"
+        android:layout_height="14dp"
+        android:layout_marginStart="8dp"
+        android:max="100"
+        android:progress="0"
+        app:layout_constraintBottom_toBottomOf="@id/vad_label"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/vad_label"
+        app:layout_constraintTop_toTopOf="@id/vad_label" />
+
     <ScrollView
         android:id="@+id/transcript_scroll"
         android:layout_width="0dp"
@@ -57,7 +107,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/status">
+        app:layout_constraintTop_toBottomOf="@id/vad_label">
 
         <TextView
             android:id="@+id/transcript"

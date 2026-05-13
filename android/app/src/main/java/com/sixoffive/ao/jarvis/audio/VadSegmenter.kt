@@ -29,6 +29,10 @@ class VadSegmenter(
     private var probSum = 0.0f
     private var probMax = 0.0f
 
+    /** Last speech probability returned by Silero, for the UI level meter. */
+    @Volatile var lastProb: Float = 0.0f
+        private set
+
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val session: OrtSession
 
@@ -83,6 +87,7 @@ class VadSegmenter(
         }
 
         val prob = run(chunk)
+        lastProb = prob
         val isSpeech = prob >= speechThreshold
 
         // Periodic diagnostic — every ~1s of audio, log avg & max prob.

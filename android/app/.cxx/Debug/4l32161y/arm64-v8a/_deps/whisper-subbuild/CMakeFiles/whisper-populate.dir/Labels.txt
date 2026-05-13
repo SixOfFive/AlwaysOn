@@ -1,0 +1,14 @@
+# Target labels
+ whisper-populate
+# Source files and their labels
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate-complete.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-build.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-configure.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-download.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-install.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-mkdir.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-patch.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-test.rule
+C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-update.rule

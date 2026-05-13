@@ -1,0 +1,21 @@
+# ninja log v5
+0	162	8003544175528188	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-mkdir	c4a2e619da57f0cf
+0	162	8003544175528188	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-mkdir	c4a2e619da57f0cf
+163	25368	8003544427597919	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-download	c285d55cf4d63f6f
+163	25368	8003544427597919	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-download	c285d55cf4d63f6f
+25369	25492	0	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-update	15a5757156078f25
+25369	25492	0	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-update	15a5757156078f25
+25492	25534	8003544429262345	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-patch	af904a26b173631f
+25492	25534	8003544429262345	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-patch	af904a26b173631f
+25535	25576	8003544429674120	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-configure	fc3391b2869836c7
+25535	25576	8003544429674120	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-configure	fc3391b2869836c7
+25576	25615	8003544430058621	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-build	167133271b13a659
+25576	25615	8003544430058621	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-build	167133271b13a659
+25615	25661	8003544430523368	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-install	c6db37f9886f8d20
+25615	25661	8003544430523368	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-install	c6db37f9886f8d20
+25661	25703	8003544430944517	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-test	c1ae53da07569940
+25661	25703	8003544430944517	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-test	c1ae53da07569940
+25703	25762	8003544431529645	CMakeFiles/whisper-populate-complete	ea0d53af217bb6ce
+25703	25762	8003544431529645	whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-done	ea0d53af217bb6ce
+25703	25762	8003544431529645	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/CMakeFiles/whisper-populate-complete	ea0d53af217bb6ce
+25703	25762	8003544431529645	C:/Users/sixoffive/Documents/AO/android/app/.cxx/Debug/4l32161y/arm64-v8a/_deps/whisper-subbuild/whisper-populate-prefix/src/whisper-populate-stamp/whisper-populate-done	ea0d53af217bb6ce
