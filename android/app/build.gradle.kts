@@ -51,6 +51,14 @@ android {
         }
         debug {
             isDebuggable = true
+            // Even in debug, build the native libs Release-optimized. The
+            // default (-O0) makes whisper.cpp 10-50x slower — a 3s clip
+            // ends up taking minutes instead of seconds.
+            externalNativeBuild {
+                cmake {
+                    arguments += "-DCMAKE_BUILD_TYPE=Release"
+                }
+            }
         }
     }
 
