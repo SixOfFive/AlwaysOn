@@ -39,3 +39,19 @@ target_link_libraries(jarvis_native
         android
         log
 )
+
+# Force aggressive optimization on whisper.cpp + ggml regardless of the
+# Gradle build variant. Android Gradle's "debug" variant otherwise passes
+# CMAKE_BUILD_TYPE=Debug, which means -O0 — and whisper at -O0 is 10–50x
+# slower, effectively unusable on a phone. Doing this per-target rather
+# than globally so our own jarvis_native.cpp stays debuggable.
+foreach(tgt whisper ggml ggml-cpu ggml-base)
+    if(TARGET ${tgt})
+        target_compile_options(${tgt} PRIVATE
+            -O3
+            -DNDEBUG
+            -ffast-math
+            -fno-finite-math-only  # whisper uses inf/nan deliberately
+        )
+    endif()
+endforeach()
