@@ -93,14 +93,11 @@ class ModelStore(private val context: Context) {
 
     companion object {
         private const val TAG = "ModelStore"
-        // Quantized base.en (~57 MB at q5_1) — same accuracy class as f16
-        // base.en, ~2-3x faster on CPU, less RAM. Quantization is loss-less
-        // enough for command-style input.
-        // Other options:
-        //   f16:     tiny.en, base.en, small.en, medium.en
-        //   q5_1:    tiny.en-q5_1, base.en-q5_1, small.en-q5_1
-        //   q4_0:    even faster, lossier
-        const val DEFAULT_MODEL = "base.en-q5_1"
+        // Quantized tiny.en (~31 MB at q5_1) — fastest size that still has
+        // acceptable command-recognition accuracy. On the test phone this
+        // gets us under 1x realtime where base.en-q5_1 was ~4x. Move up
+        // to base.en-q5_1 if accuracy isn't good enough.
+        const val DEFAULT_MODEL = "tiny.en-q5_1"
 
         // On-device intent classifier model. Qwen2.5-0.5B-Instruct at Q5_K_M:
         // ~400 MB, runs in ~300 MB RAM, fast enough to classify a transcript
