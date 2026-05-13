@@ -8,8 +8,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket
 
-from jarvis_server.claude import ClaudeRouter
+from jarvis_server.catalog import load_catalog, pick_model
 from jarvis_server.config import Config
+from jarvis_server.ollama_router import OllamaRouter, ensure_pulled
 from jarvis_server.router import Router
 from jarvis_server.session import Session
 from jarvis_server.stt import STT
@@ -27,8 +28,60 @@ from jarvis_server.tools.wol import wol_tools
 log = logging.getLogger(__name__)
 
 
+async def _build_llm_router(
+    cfg: Config,
+    registry,  # ToolRegistry, but avoid circular type hint
+) -> OllamaRouter | None:
+    """Pick a model from the catalog (or honor JARVIS_OLLAMA_MODEL),
+    make sure Ollama has it, and return a configured OllamaRouter.
+
+    Returns None if no suitable model is available and Ollama can't be
+    reached at all — the server still works for fast-path tools in that
+    case.
+    """
+    model_tag: str | None = cfg.ollama_model_override or None
+    selection_reason = "JARVIS_OLLAMA_MODEL override"
+
+    if model_tag is None:
+        try:
+            catalog = await load_catalog(cfg.catalog_url)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("catalog load failed (%s); LLM disabled", exc)
+            return None
+        choice = pick_model(
+            catalog,
+            vram_budget_gb=cfg.ollama_vram_budget_gb,
+            min_context=cfg.ollama_context_length,
+            preferred_server=cfg.ollama_server_name,
+        )
+        if choice is None:
+            log.warning(
+                "no catalog model fits constraints (vram<=%.0fGB, ctx>=%d, tools); LLM disabled",
+                cfg.ollama_vram_budget_gb, cfg.ollama_context_length,
+            )
+            return None
+        log.info("model pick: %s — %s", choice.tag, choice.reason)
+        model_tag = choice.tag
+        selection_reason = choice.reason
+
+    try:
+        await ensure_pulled(cfg.ollama_url, model_tag)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ollama unreachable or pull failed (%s); LLM disabled", exc)
+        return None
+
+    log.info("LLM router ready: model=%s ctx=%d (%s)",
+             model_tag, cfg.ollama_context_length, selection_reason)
+    return OllamaRouter(
+        registry,
+        model=model_tag,
+        base_url=cfg.ollama_url,
+        context_length=cfg.ollama_context_length,
+    )
+
+
 def create_app(config: Config | None = None) -> FastAPI:
-    cfg = config or Config()
+    cfg = config or Config.load()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -77,14 +130,17 @@ def create_app(config: Config | None = None) -> FastAPI:
                     pass
                 vault = None
 
-        claude = ClaudeRouter.try_create(registry, model=cfg.claude_model)
-        app.state.router = Router(registry, claude)
+        llm_router = await _build_llm_router(cfg, registry)
+        app.state.llm_router = llm_router
+        app.state.router = Router(registry, llm_router)
         app.state.client_count = 0
 
         try:
             yield
         finally:
             log.info("shutdown")
+            if llm_router is not None:
+                await llm_router.aclose()
             if vault is not None:
                 await vault.close()
 
@@ -103,6 +159,8 @@ def create_app(config: Config | None = None) -> FastAPI:
                 websocket,
                 stt=app.state.stt,
                 router=app.state.router,
+                idle_reset_sec=cfg.idle_reset_sec,
+                trigger_phrase=cfg.trigger_phrase,
             )
             await session.run()
         except Exception as exc:  # noqa: BLE001

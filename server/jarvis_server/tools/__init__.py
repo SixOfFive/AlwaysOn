@@ -24,11 +24,16 @@ class Tool:
     input_schema: dict[str, Any]
     handler: Handler
 
-    def as_claude_tool(self) -> dict[str, Any]:
+    def as_ollama_tool(self) -> dict[str, Any]:
+        """OpenAI-compatible function-tool shape — what Ollama's /api/chat
+        and /v1/chat/completions both accept."""
         return {
-            "name": self.name,
-            "description": self.description,
-            "input_schema": self.input_schema,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.input_schema,
+            },
         }
 
 
@@ -47,5 +52,5 @@ class ToolRegistry:
     def all(self) -> list[Tool]:
         return list(self._tools.values())
 
-    def as_claude_tools(self) -> list[dict[str, Any]]:
-        return [t.as_claude_tool() for t in self._tools.values()]
+    def as_ollama_tools(self) -> list[dict[str, Any]]:
+        return [t.as_ollama_tool() for t in self._tools.values()]

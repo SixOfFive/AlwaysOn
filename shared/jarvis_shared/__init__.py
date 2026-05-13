@@ -8,6 +8,7 @@ from jarvis_shared.protocol import (
     EndUtterance,
     Command,
     Cancel,
+    ResetContext,
     Ping,
     Welcome,
     Transcript,
@@ -15,6 +16,7 @@ from jarvis_shared.protocol import (
     Say,
     ErrorMsg,
     Pong,
+    ContextCleared,
     parse_control,
 )
 
@@ -28,6 +30,7 @@ __all__ = [
     "EndUtterance",
     "Command",
     "Cancel",
+    "ResetContext",
     "Ping",
     "Welcome",
     "Transcript",
@@ -35,5 +38,6 @@ __all__ = [
     "Say",
     "ErrorMsg",
     "Pong",
+    "ContextCleared",
     "parse_control",
 ]

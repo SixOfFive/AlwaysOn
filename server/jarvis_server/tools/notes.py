@@ -1,8 +1,8 @@
-"""Append a quick note to a daily file in the user's Obsidian vault.
+"""Append a quick note to a daily file.
 
-Path: $JARVIS_NOTES_DIR/jarvis-YYYY-MM-DD.md, defaulting to the user's
-known vault at C:\\Users\\sixoffive\\Documents\\Obsidian\\obsidian\\Inbox.
-Each note is one bullet with a timestamp.
+Path: $JARVIS_NOTES_DIR/jarvis-YYYY-MM-DD.md, defaulting to
+~/jarvis-notes. Point this at an Obsidian Inbox if you want notes to
+land in your vault. Each note is one bullet with a timestamp.
 """
 
 from __future__ import annotations
@@ -17,12 +17,10 @@ from jarvis_server.tools import Tool
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_DIR = Path(r"C:\Users\sixoffive\Documents\Obsidian\obsidian\Inbox")
-
 
 def _notes_dir() -> Path:
     raw = os.getenv("JARVIS_NOTES_DIR")
-    return Path(raw) if raw else _DEFAULT_DIR
+    return Path(raw).expanduser() if raw else (Path.home() / "jarvis-notes")
 
 
 async def _append_note(args: dict[str, Any]) -> str:
@@ -57,11 +55,11 @@ def notes_tools() -> list[Tool]:
         Tool(
             name="append_note",
             description=(
-                "Append a short note to today's Jarvis notes file in the "
-                "user's Obsidian Inbox. Use for things the user wants to "
-                "remember or come back to later — quick ideas, to-do items, "
-                "reminders. The user already trusts this lands in their "
-                "vault; just save the text and confirm briefly."
+                "Append a short note to today's Jarvis notes file. Use "
+                "for things the user wants to remember or come back to "
+                "later — quick ideas, to-do items, reminders. The user "
+                "already trusts where this lands; just save the text "
+                "and confirm briefly."
             ),
             input_schema={
                 "type": "object",

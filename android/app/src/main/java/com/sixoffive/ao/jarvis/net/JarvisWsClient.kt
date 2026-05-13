@@ -40,10 +40,14 @@ class JarvisWsClient(
 
     sealed interface Event {
         data class Welcomed(val sessionId: String) : Event
+        data class Transcribed(val text: String, val final: Boolean) : Event
         data class Said(val text: String) : Event
         data class Thinking(val note: String) : Event
         data class Errored(val code: String, val message: String) : Event
         data class Disconnected(val reason: String) : Event
+        /** Server confirmed the conversation history was cleared in
+         *  response to our sendResetContext(). UI can now reset its log. */
+        object ContextCleared : Event
     }
 
     fun connect() {
@@ -62,6 +66,43 @@ class JarvisWsClient(
         val w = ws ?: return false
         if (!ready) return false
         val json = protocolJson.encodeToString(Outgoing.serializer(), Command(text))
+        return w.send(json)
+    }
+
+    /** Open an audio utterance. Send raw PCM bytes after this, then
+     *  sendEndUtterance() to trigger server-side STT. `keyword` is the
+     *  wake-word the client matched on; pass "" to ask the server to
+     *  apply its own transcript-based trigger check. */
+    fun sendWake(keyword: String = "", confidence: Float = 0.0f): Boolean {
+        val w = ws ?: return false
+        if (!ready) return false
+        val msg = Wake(keyword, confidence, System.currentTimeMillis())
+        val json = protocolJson.encodeToString(Outgoing.serializer(), msg)
+        return w.send(json)
+    }
+
+    /** Send a raw PCM audio chunk (int16 little-endian, 16 kHz mono).
+     *  Only meaningful between sendWake() and sendEndUtterance(). */
+    fun sendAudio(pcm: ByteArray): Boolean {
+        val w = ws ?: return false
+        if (!ready) return false
+        return w.send(ByteString.of(*pcm))
+    }
+
+    /** Close an audio utterance and ask the server to transcribe. */
+    fun sendEndUtterance(): Boolean {
+        val w = ws ?: return false
+        if (!ready) return false
+        val json = protocolJson.encodeToString(Outgoing.serializer(), EndUtterance())
+        return w.send(json)
+    }
+
+    /** Ask the server to drop its conversation history for this
+     *  session. Server replies with `ContextCleared` once done. */
+    fun sendResetContext(): Boolean {
+        val w = ws ?: return false
+        if (!ready) return false
+        val json = protocolJson.encodeToString(Outgoing.serializer(), ResetContext())
         return w.send(json)
     }
 
@@ -88,7 +129,8 @@ class JarvisWsClient(
                 is Say -> _events.tryEmit(Event.Said(msg.text))
                 is Thinking -> _events.tryEmit(Event.Thinking(msg.note))
                 is ErrorMsg -> _events.tryEmit(Event.Errored(msg.code, msg.message))
-                is Transcript -> { /* not used in client-STT mode */ }
+                is Transcript -> _events.tryEmit(Event.Transcribed(msg.text, msg.final))
+                is ContextCleared -> _events.tryEmit(Event.ContextCleared)
                 is Pong -> { /* keepalive */ }
             }
         }

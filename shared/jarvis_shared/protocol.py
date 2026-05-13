@@ -49,6 +49,12 @@ class Cancel(BaseModel):
     type: Literal["cancel"] = "cancel"
 
 
+class ResetContext(BaseModel):
+    """Tell the server to drop all conversation history for this session
+    immediately. The server replies with ContextCleared once done."""
+    type: Literal["reset_context"] = "reset_context"
+
+
 class Ping(BaseModel):
     type: Literal["ping"] = "ping"
 
@@ -91,11 +97,18 @@ class Pong(BaseModel):
     type: Literal["pong"] = "pong"
 
 
+class ContextCleared(BaseModel):
+    """Server confirms that ResetContext was processed; the conversation
+    is now empty. Client should clear any UI it was showing for the
+    previous turns."""
+    type: Literal["context_cleared"] = "context_cleared"
+
+
 # Tagged union for parsing any inbound control frame.
 ControlMessage = Annotated[
     Union[
-        Hello, Wake, EndUtterance, Command, Cancel, Ping,
-        Welcome, Transcript, Thinking, Say, ErrorMsg, Pong,
+        Hello, Wake, EndUtterance, Command, Cancel, ResetContext, Ping,
+        Welcome, Transcript, Thinking, Say, ErrorMsg, Pong, ContextCleared,
     ],
     Field(discriminator="type"),
 ]

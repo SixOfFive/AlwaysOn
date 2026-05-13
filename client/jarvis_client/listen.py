@@ -80,9 +80,8 @@ async def run(
     if server_url:
         ws = await _connect(server_url, client_id or f"{socket.gethostname()}-mic")
 
-    speaking = asyncio.Event()  # set while TTS is playing
     if ws is not None:
-        asyncio.create_task(_read_server(ws, tts, speaking))
+        asyncio.create_task(_read_server(ws, tts))
         banner = (f"\n[transcribe + jarvis trigger] connected to {server_url}. "
                   "Say 'jarvis <command>' to act. Ctrl-C to stop.\n")
     else:
@@ -93,9 +92,9 @@ async def run(
     try:
         while True:
             pcm = await segments.get()
-            if speaking.is_set():
-                # Drop anything captured while TTS was speaking.
-                continue
+            # No TTS mute — we transcribe everything the mic hears. Any
+            # self-triggering is mitigated by the server-side system
+            # prompt that forbids the literal word "computer" in replies.
             text = await stt.transcribe(pcm)
             if not text:
                 continue
@@ -135,7 +134,6 @@ async def _connect(url: str, client_id: str) -> websockets.ClientConnection:
 async def _read_server(
     ws: websockets.ClientConnection,
     tts: TTS,
-    speaking: asyncio.Event,
 ) -> None:
     try:
         async for raw in ws:
@@ -152,11 +150,7 @@ async def _read_server(
                     continue
                 sys.stdout.write(f"jarvis> {msg.text}\n")
                 sys.stdout.flush()
-                speaking.set()
-                try:
-                    await tts.say(msg.text)
-                finally:
-                    speaking.clear()
+                await tts.say(msg.text)
             elif isinstance(msg, Thinking):
                 log.info("thinking… %s", msg.note)
             elif isinstance(msg, Transcript):

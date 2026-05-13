@@ -1,0 +1,114 @@
+# Jarvis (AO) deployment config.
+#
+# Copy this file to `jarvis.toml` at the repo root (or set $JARVIS_CONFIG
+# to its full path) and edit the values for your setup. `jarvis.toml` is
+# gitignored so your personal paths and IPs don't end up in the repo.
+#
+# Every value here can also be overridden by a JARVIS_* environment
+# variable — those win over the TOML file. So you can run a one-off with
+# `set JARVIS_OLLAMA_MODEL=qwen2.5:7b` without editing the file.
+#
+# Loading order: $JARVIS_CONFIG → ./jarvis.toml → <repo>/jarvis.toml →
+# ~/.config/jarvis/jarvis.toml → built-in generic defaults.
+
+
+# --- Wake / trigger ----------------------------------------------------
+
+# What word the user has to say for the assistant to act. The mic is
+# always listening; this is just the filter. Common choices: "computer",
+# "jarvis", "assistant". The regex auto-allows the prefixes "hey",
+# "ok", and "okay" before this word.
+trigger_phrase = "computer"
+
+
+# --- Speech-to-text ----------------------------------------------------
+
+[stt]
+# faster-whisper model. "large-v3" is the gold standard; "medium.en",
+# "small.en", "tiny.en" are progressively smaller and faster.
+model = "large-v3"
+# "cuda" or "cpu". CUDA on Windows needs the NVIDIA pip wheels;
+# see README for setup.
+device = "cuda"
+# "float16" on CUDA, "int8" on CPU.
+compute_type = "float16"
+
+
+# --- Local LLM (Ollama) ------------------------------------------------
+
+[ollama]
+# Where Ollama is reachable. localhost works if AO and Ollama share a
+# box; otherwise put your GPU box's LAN address here. AO server hits
+# this URL — clients don't.
+url = "http://localhost:11434"
+
+# Upper bound on (model VRAM + KV-cache VRAM) the catalog picker is
+# allowed to choose. Leave 1-2 GB headroom on top of your card.
+vram_budget_gb = 14
+
+# Context length passed to Ollama as `num_ctx`. 16384 is plenty for
+# voice flow; bumping doubles KV-cache VRAM.
+context_length = 16384
+
+# Hard override of the catalog pick. Set to an exact Ollama tag like
+# "qwen2.5:7b-instruct-q5_K_M" to skip catalog selection entirely.
+# Leave empty (or remove the line) to let the catalog choose.
+model_override = ""
+
+# Catalog name for "this model is already pulled on this box" tiebreak.
+# Should match a `localServers[].name` entry in the catalog JSON. Empty
+# string disables the tiebreak (score + tok_sec decide alone) — that's
+# the right default unless YOU appear in the catalog's localServers.
+server_name = ""
+
+# Where the model catalog lives. Public GitHub by default.
+catalog_url = "https://raw.githubusercontent.com/SixOfFive/TypeCast/main/models-catalog.json"
+
+
+# --- Session / conversation -------------------------------------------
+
+[session]
+# Clear conversation history after this many seconds with no activity.
+# 300 = 5 minutes. Set to 0 to disable auto-reset.
+idle_reset_sec = 300
+
+
+# --- Filesystem paths -------------------------------------------------
+
+[paths]
+# Where the `append_note` tool writes daily Markdown files.
+# Set to your Obsidian Inbox if you want notes to land in your vault.
+notes_dir = "~/jarvis-notes"
+
+# Where the daily dictation log (every transcript the server hears) is
+# written. Same advice: point at your Obsidian vault for grep-ability.
+dictation_dir = "~/jarvis-dictation"
+
+# Where the `save_code` tool writes generated files.
+workspace_dir = "~/jarvis-workspace"
+
+
+# --- Obsidian vault MCP -----------------------------------------------
+
+[vault]
+# Set true to skip the vault MCP entirely (no vault_* tools registered).
+# Useful if you don't have the obsidian-vault MCP server set up.
+disabled = false
+
+# Command that starts the vault MCP server. Defaults assume the
+# obsidian-vault MCP server lives in your Claude Code config dir.
+command = "python"
+args = ["~/.claude/scripts/vault-server.py"]
+
+
+# --- Wake-on-LAN ------------------------------------------------------
+
+[wol]
+# UDP broadcast address for magic packets. The default works for most
+# /24 LANs; override on segmented networks.
+broadcast = "255.255.255.255"
+port = 9
+# Map of friendly hostname → MAC address. Each entry becomes a target
+# the `wake_on_lan` tool can boot. Example:
+# hosts = { bigiron = "AA:BB:CC:DD:EE:FF", nuc = "11:22:33:44:55:66" }
+hosts = {}

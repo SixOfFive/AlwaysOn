@@ -61,6 +61,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.resetContext.setOnClickListener {
+            // Ask the server to drop session history. Wait for the
+            // ContextCleared event before wiping the transcript, so the
+            // user sees a clear "before/after" if the request fails.
+            JarvisService.resetContext(this)
+        }
+
         val sttReady = modelStore.isCached(ModelStore.DEFAULT_MODEL)
         val clReady = modelStore.classifierIsCached()
         binding.status.text = when {
@@ -82,6 +89,8 @@ class MainActivity : AppCompatActivity() {
                             appendLine("jarvis> ${event.text}")
                         is JarvisService.UiEvent.Status ->
                             binding.status.text = event.text
+                        is JarvisService.UiEvent.ContextCleared ->
+                            clearTranscript()
                         is JarvisService.UiEvent.AudioMetric -> {
                             // peak is 0..32767. Use a log-ish curve so quiet
                             // speech still moves the bar instead of squashing
@@ -112,6 +121,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureModelThenStart() {
+        // ENGINE_SERVER (the default when a server URL is set) needs no
+        // on-device whisper or classifier model — the server transcribes.
+        val url = binding.serverUrl.text?.toString().orEmpty().trim()
+        if (url.isNotEmpty()) {
+            startListening()
+            return
+        }
         val sttName = ModelStore.DEFAULT_MODEL
         val needSt = !modelStore.isCached(sttName)
         val needCl = !modelStore.classifierIsCached()
@@ -173,6 +189,13 @@ class MainActivity : AppCompatActivity() {
         binding.transcriptScroll.post {
             binding.transcriptScroll.fullScroll(android.view.View.FOCUS_DOWN)
         }
+    }
+
+    /** Wipe the transcript display. Triggered by the server's
+     *  ContextCleared ack after the user taps "Reset context". */
+    private fun clearTranscript() {
+        transcriptLog.setLength(0)
+        binding.transcript.text = ""
     }
 
     companion object {

@@ -3,6 +3,7 @@
     <string name="server_url_hint">ws://192.168.x.x:7333/ws</string>
     <string name="start">Start listening</string>
     <string name="stop">Stop</string>
+    <string name="reset_context">Reset context</string>
     <string name="notif_channel_listening">Listening</string>
     <string name="notif_channel_listening_desc">Listening for the wake word "computer".</string>
     <string name="notif_listening_title">Listening</string>

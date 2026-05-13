@@ -13,7 +13,7 @@ dependencies = [
     "pydantic>=2.6",
     "numpy>=1.26",
     "faster-whisper>=1.1",
-    "anthropic>=0.40",
+    "httpx>=0.27",
     "mcp>=1.0",
     "ddgs>=8.0",
     "jarvis-shared",

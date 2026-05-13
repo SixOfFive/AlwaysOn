@@ -15,11 +15,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="jarvis-client")
     parser.add_argument(
         "--mode",
-        choices=("transcribe", "live", "synthetic"),
-        default="transcribe",
+        choices=("stream", "transcribe", "live", "synthetic"),
+        default="stream",
         help=(
-            "transcribe (default): VAD-gated local STT, prints to stdout, "
-            "no server. live: wake-word + server (legacy). "
+            "stream (default): local VAD, server does STT + routing + TTS reply "
+            "(matches Android). transcribe: VAD-gated *local* whisper, prints to "
+            "stdout, server optional. live: openWakeWord + server (legacy). "
             "synthetic: wire smoke test."
         ),
     )
@@ -27,9 +28,9 @@ def main() -> None:
         "--server",
         default=None,
         help=(
-            "WebSocket URL of jarvis-server. In transcribe mode this is "
-            "optional — without it, the client only prints transcripts. "
-            "Required for live/synthetic modes. Example: ws://127.0.0.1:7333/ws"
+            "WebSocket URL of jarvis-server. Required for stream/live/synthetic. "
+            "Optional in transcribe mode (without it, only prints transcripts). "
+            "Example: ws://127.0.0.1:7333/ws"
         ),
     )
     parser.add_argument("--id", dest="client_id", default=f"{socket.gethostname()}-mic")
@@ -72,7 +73,17 @@ def main() -> None:
         device = int(device)
 
     try:
-        if args.mode == "transcribe":
+        if args.mode == "stream":
+            server_url = args.server or "ws://127.0.0.1:7333/ws"
+            from jarvis_client.stream import run as run_stream
+            asyncio.run(run_stream(
+                server_url=server_url,
+                client_id=args.client_id,
+                audio_device=device,
+                speech_threshold=args.speech_threshold,
+                min_silence_ms=args.min_silence_ms,
+            ))
+        elif args.mode == "transcribe":
             from jarvis_client.listen import run as run_transcribe
             asyncio.run(run_transcribe(
                 audio_device=device,

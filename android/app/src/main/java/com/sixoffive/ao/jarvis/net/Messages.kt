@@ -31,6 +31,22 @@ data class Hello(
 data class Command(val text: String) : Outgoing
 
 @Serializable
+@SerialName("wake")
+data class Wake(
+    val keyword: String,
+    val confidence: Float = 0.0f,
+    @SerialName("unix_millis") val unixMillis: Long,
+) : Outgoing
+
+@Serializable
+@SerialName("end_utterance")
+class EndUtterance : Outgoing
+
+@Serializable
+@SerialName("reset_context")
+class ResetContext : Outgoing
+
+@Serializable
 @SerialName("ping")
 class Ping : Outgoing
 
@@ -67,6 +83,10 @@ data class ErrorMsg(val code: String, val message: String) : Incoming
 @Serializable
 @SerialName("pong")
 class Pong : Incoming
+
+@Serializable
+@SerialName("context_cleared")
+class ContextCleared : Incoming
 
 val protocolJson: Json = Json {
     ignoreUnknownKeys = true

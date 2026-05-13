@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import com.sixoffive.ao.jarvis.classifier.Classifier
 import com.sixoffive.ao.jarvis.net.JarvisWsClient
 import com.sixoffive.ao.jarvis.stt.ModelStore
+import com.sixoffive.ao.jarvis.stt.ServerStreamingStt
 import com.sixoffive.ao.jarvis.stt.SpeechToText
 import com.sixoffive.ao.jarvis.stt.SystemStt
 import com.sixoffive.ao.jarvis.stt.TranscriptLog
@@ -51,8 +52,10 @@ class JarvisService : Service() {
     private var pipelineJob: Job? = null
     private var transcriptLog: TranscriptLog? = null
     private var classifier: Classifier? = null
-    private val speakLock = Mutex()  // serialize TTS, drop transcripts while speaking
-    @Volatile private var speaking = false
+    // Serialize TTS playback so back-to-back Say events don't overlap.
+    // We no longer mute the mic during TTS — see the comments in
+    // ServerStreamingStt and the speech.start() collect block.
+    private val speakLock = Mutex()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -66,6 +69,18 @@ class JarvisService : Service() {
                 val server = intent.getStringExtra(EXTRA_SERVER_URL).orEmpty()
                 val engine = intent.getStringExtra(EXTRA_STT_ENGINE) ?: ENGINE_WHISPER
                 startListening(server, engine)
+                return START_STICKY
+            }
+            ACTION_RESET_CONTEXT -> {
+                val sent = ws?.sendResetContext() ?: false
+                if (!sent) {
+                    // Not connected (or no ws yet) — there's nothing on the
+                    // server to clear, but the user wants a clean slate, so
+                    // emit the ack locally so the UI clears anyway.
+                    Log.i(TAG, "reset_context: not connected — emitting local ack")
+                    _events.tryEmit(UiEvent.ContextCleared)
+                    _events.tryEmit(UiEvent.Status("context cleared (offline)"))
+                }
                 return START_STICKY
             }
         }
@@ -111,7 +126,7 @@ class JarvisService : Service() {
 
         val speech: SpeechToText = when (engine) {
             ENGINE_SYSTEM -> SystemStt(applicationContext)
-            else -> WhisperStt(
+            ENGINE_WHISPER -> WhisperStt(
                 applicationContext,
                 onMetric = { peak, prob ->
                     _events.tryEmit(UiEvent.AudioMetric(peak, prob))
@@ -120,8 +135,25 @@ class JarvisService : Service() {
                     _events.tryEmit(UiEvent.Status("transcribing $pct%"))
                 },
             )
+            else -> {
+                // ENGINE_SERVER (default): stream audio to the server,
+                // let it transcribe + apply the wake-word trigger + route.
+                if (client == null) {
+                    Log.e(TAG, "ENGINE_SERVER selected but no server URL — falling back to whisper")
+                    WhisperStt(applicationContext)
+                } else {
+                    ServerStreamingStt(
+                        applicationContext,
+                        client,
+                        onMetric = { peak, prob ->
+                            _events.tryEmit(UiEvent.AudioMetric(peak, prob))
+                        },
+                    )
+                }
+            }
         }
         stt = speech
+        val serverDrivesStt = (engine == ENGINE_SERVER && client != null)
 
         pipelineJob = scope.launch {
             // Server events -> TTS reply + UI emit.
@@ -133,16 +165,20 @@ class JarvisService : Service() {
                                 Log.i(TAG, "ws: welcomed session=${ev.sessionId}")
                                 _events.tryEmit(UiEvent.Status("connected: ${ev.sessionId}"))
                             }
+                            is JarvisWsClient.Event.Transcribed -> {
+                                // Server-side STT result. Surface for UI/log.
+                                // The server applies its own trigger filter
+                                // before routing, so we don't run Trigger here.
+                                if (ev.final && ev.text.isNotBlank()) {
+                                    transcriptLog?.stt(ev.text)
+                                    _events.tryEmit(UiEvent.Transcript(ev.text))
+                                }
+                            }
                             is JarvisWsClient.Event.Said -> {
                                 transcriptLog?.say(ev.text)
                                 _events.tryEmit(UiEvent.Said(ev.text))
                                 speakLock.withLock {
-                                    speaking = true
-                                    try {
-                                        tts?.say(ev.text)
-                                    } finally {
-                                        speaking = false
-                                    }
+                                    tts?.say(ev.text)
                                 }
                             }
                             is JarvisWsClient.Event.Thinking ->
@@ -151,22 +187,40 @@ class JarvisService : Service() {
                                 _events.tryEmit(UiEvent.Status("server error ${ev.code}: ${ev.message}"))
                             is JarvisWsClient.Event.Disconnected ->
                                 _events.tryEmit(UiEvent.Status("ws ${ev.reason}"))
+                            is JarvisWsClient.Event.ContextCleared -> {
+                                Log.i(TAG, "ws: context cleared by server")
+                                _events.tryEmit(UiEvent.ContextCleared)
+                                _events.tryEmit(UiEvent.Status("context cleared"))
+                            }
                         }
                     }
                 }
             }
 
-            // STT transcripts -> print + trigger -> server.
-            speech.start().collect { transcript ->
-                if (speaking) return@collect  // ignore our own voice
-                transcriptLog?.stt(transcript)
-                _events.tryEmit(UiEvent.Transcript(transcript))
+            if (serverDrivesStt) {
+                // Server-side STT engine: ServerStreamingStt streams audio
+                // to the server; transcripts come back via the ws event flow
+                // above. The collect call here still runs so the audio
+                // pipeline stays alive — it just never emits.
+                speech.start().collect { /* unused */ }
+            } else {
+                // On-device STT engines (whisper, system): collect transcripts
+                // locally, apply the wake-word trigger, send Command. We no
+                // longer drop transcripts captured during TTS — the assistant
+                // hearing itself is a fact of life, and the server's queue
+                // sequences follow-ups correctly. The system prompt forbids
+                // the model from saying "computer" in replies, which is the
+                // main safeguard against self-triggering loops.
+                speech.start().collect { transcript ->
+                    transcriptLog?.stt(transcript)
+                    _events.tryEmit(UiEvent.Transcript(transcript))
 
-                val cmd = decideCommand(transcript) ?: return@collect
-                transcriptLog?.cmd(cmd)
-                _events.tryEmit(UiEvent.Triggered(cmd))
-                Log.i(TAG, "trigger -> $cmd")
-                client?.sendCommand(cmd)
+                    val cmd = decideCommand(transcript) ?: return@collect
+                    transcriptLog?.cmd(cmd)
+                    _events.tryEmit(UiEvent.Triggered(cmd))
+                    Log.i(TAG, "trigger -> $cmd")
+                    client?.sendCommand(cmd)
+                }
             }
         }
     }
@@ -264,6 +318,9 @@ class JarvisService : Service() {
         /** Live meter — peak amplitude (0..32767) and VAD prob (0..1).
          *  Emitted ~8 Hz while the service is listening. */
         data class AudioMetric(val peak: Int, val vadProb: Float) : UiEvent
+        /** Server confirmed the reset-context request — MainActivity
+         *  should wipe its transcript log. */
+        object ContextCleared : UiEvent
     }
 
     companion object {
@@ -273,11 +330,15 @@ class JarvisService : Service() {
 
         const val ACTION_START = "com.sixoffive.ao.jarvis.START"
         const val ACTION_STOP = "com.sixoffive.ao.jarvis.STOP"
+        const val ACTION_RESET_CONTEXT = "com.sixoffive.ao.jarvis.RESET_CONTEXT"
         const val EXTRA_SERVER_URL = "server_url"
         const val EXTRA_STT_ENGINE = "stt_engine"
 
         const val ENGINE_WHISPER = "whisper"
         const val ENGINE_SYSTEM = "system"
+        /** Stream audio to the server; CUDA-backed faster-whisper transcribes
+         *  there. Recommended on phones where on-device whisper is too slow. */
+        const val ENGINE_SERVER = "server"
 
         private val _events = MutableSharedFlow<UiEvent>(
             extraBufferCapacity = 64,
@@ -285,7 +346,7 @@ class JarvisService : Service() {
         )
         val events: SharedFlow<UiEvent> = _events.asSharedFlow()
 
-        fun start(context: Context, serverUrl: String, engine: String = ENGINE_WHISPER) {
+        fun start(context: Context, serverUrl: String, engine: String = ENGINE_SERVER) {
             val intent = Intent(context, JarvisService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_SERVER_URL, serverUrl)
@@ -295,6 +356,14 @@ class JarvisService : Service() {
 
         fun stop(context: Context) {
             val intent = Intent(context, JarvisService::class.java).setAction(ACTION_STOP)
+            context.startService(intent)
+        }
+
+        /** Ask the service to clear server-side conversation history.
+         *  Activity will receive [UiEvent.ContextCleared] when it lands
+         *  (or immediately if no ws is connected). */
+        fun resetContext(context: Context) {
+            val intent = Intent(context, JarvisService::class.java).setAction(ACTION_RESET_CONTEXT)
             context.startService(intent)
         }
     }

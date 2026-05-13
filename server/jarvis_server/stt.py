@@ -1,11 +1,16 @@
 """Speech-to-text via faster-whisper.
 
-CPU-only by default so the 4070 stays free for LLM inference. The model
-loads once at server startup. Transcription happens off the asyncio
-event loop in a thread, since it's CPU-bound and blocking.
+Runs on CUDA by default — on a 4070, large-v3 transcribes a 3-second
+utterance in ~200-300 ms, which is the latency budget that makes the
+Android client (audio-streaming-to-server) feel responsive. Override
+via JARVIS_STT_DEVICE=cpu / JARVIS_STT_MODEL=... for headless boxes.
 
-Input PCM: signed 16-bit little-endian, 16 kHz, mono — matches what the
-client streams.
+The model loads once at server startup. Transcription happens off the
+asyncio event loop in a thread, since faster-whisper releases the GIL
+but blocks the caller until done.
+
+Input PCM: signed 16-bit little-endian, 16 kHz, mono — matches what
+both clients stream.
 """
 
 from __future__ import annotations
@@ -15,6 +20,9 @@ import logging
 import time
 
 import numpy as np
+
+from jarvis_server import _cuda  # noqa: F401 — register NVIDIA DLLs before faster_whisper imports
+
 from faster_whisper import WhisperModel
 
 log = logging.getLogger(__name__)
@@ -23,9 +31,9 @@ log = logging.getLogger(__name__)
 class STT:
     def __init__(
         self,
-        model_name: str = "small.en",
-        device: str = "cpu",
-        compute_type: str = "int8",
+        model_name: str = "large-v3",
+        device: str = "cuda",
+        compute_type: str = "float16",
         language: str = "en",
     ) -> None:
         log.info("loading faster-whisper %r on %s (%s)…",

@@ -24,10 +24,20 @@ env/
 *.swo
 
 # Local config / secrets
+# jarvis.toml holds personal IPs, paths, MAC addresses, etc. The
+# committed jarvis.example.toml is the schema/template.
+jarvis.toml
 *.local.toml
 .env
 .env.*
 !.env.example
+
+# Personal scratch / context dumps — never commit. braindump_ao.md is
+# the working-state file the assistant reads after compaction; full of
+# IPs, project names, debugging history. Move other such notes into
+# private/ to keep them safely out of the index.
+braindump_ao.md
+private/
 
 # Model weights and audio scratch
 models/

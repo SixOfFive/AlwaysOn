@@ -54,7 +54,7 @@ _FILENAME_OK = re.compile(r"^[A-Za-z0-9._\-]+$")
 
 def _workspace() -> Path:
     raw = os.getenv("JARVIS_WORKSPACE")
-    return Path(raw) if raw else _DEFAULT_WORKSPACE
+    return Path(raw).expanduser() if raw else _DEFAULT_WORKSPACE
 
 
 def _sanitize(filename: str, language: str | None) -> str:
