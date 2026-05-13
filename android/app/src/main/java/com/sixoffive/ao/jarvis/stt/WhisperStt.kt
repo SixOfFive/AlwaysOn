@@ -133,7 +133,7 @@ class WhisperStt(
                 )
             }
             val elapsed = System.currentTimeMillis() - t0
-            val cleaned = text.trim()
+            val cleaned = scrubWhisperArtifacts(text.trim())
             Log.i(TAG, "transcribe: ${audio.size} samples in ${elapsed}ms -> ${cleaned.length} chars")
             if (cleaned.isNotEmpty()) {
                 transcripts.tryEmit(cleaned)
@@ -172,5 +172,31 @@ class WhisperStt(
 
     companion object {
         private const val TAG = "WhisperStt"
+
+        // Bracketed non-speech markers whisper emits on silence/noise.
+        private val BRACKETED = Regex(
+            """[\[(](?:blank[_ ]?audio|silence|music|noise|laughter|applause)[\])]""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        // Common hallucinations whisper produces on near-silent input —
+        // YouTube-corpus echoes that aren't anyone's actual speech.
+        private val HALLUCINATIONS = setOf(
+            "thanks for watching", "thanks for watching.",
+            "thank you for watching", "thank you for watching.",
+            "thank you.", "thank you",
+            "you", "you.",
+            ".", "..", "...",
+            "bye", "bye.", "bye!",
+        )
+
+        /** Return the transcript with whisper's non-speech artifacts
+         *  stripped. May return empty if the whole thing was junk. */
+        fun scrubWhisperArtifacts(text: String): String {
+            val noBrackets = BRACKETED.replace(text, "").trim()
+            val lower = noBrackets.lowercase().trim('.', '!', '?', ' ', '\t')
+            if (lower in HALLUCINATIONS) return ""
+            return noBrackets
+        }
     }
 }
