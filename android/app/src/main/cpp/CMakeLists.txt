@@ -31,16 +31,18 @@ set(GGML_OPENMP            OFF CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE         OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS      OFF CACHE BOOL "" FORCE)
 
-# Enable Vulkan GPU backend in ggml. On many Android phones (Adreno, Mali,
-# even some Unisoc) the Vulkan compute path is 2-4x faster than CPU for
-# whisper. Set JARVIS_DISABLE_VULKAN=ON in your local Gradle config to
-# disable this if the native build fails.
-option(JARVIS_DISABLE_VULKAN "Disable ggml Vulkan backend" OFF)
-if(NOT JARVIS_DISABLE_VULKAN)
+# Vulkan GPU backend: disabled by default. To enable, you need glslc
+# (Khronos SPIR-V compiler) on PATH and a Vulkan SDK reachable by CMake's
+# find_package(Vulkan). On Windows + Android NDK that's not automatic —
+# the build fails at "Generate vulkan shaders" with Vulkan_GLSLC_EXECUTABLE-NOTFOUND.
+# If you want to try it again later: install the Vulkan SDK, then set
+# -DJARVIS_ENABLE_VULKAN=ON via gradle.
+option(JARVIS_ENABLE_VULKAN "Enable ggml Vulkan backend" OFF)
+if(JARVIS_ENABLE_VULKAN)
     set(GGML_VULKAN ON CACHE BOOL "" FORCE)
     message(STATUS "ggml Vulkan backend: enabled")
 else()
-    message(STATUS "ggml Vulkan backend: disabled")
+    message(STATUS "ggml Vulkan backend: disabled (CPU only)")
 endif()
 
 # Force aggressive optimization globally BEFORE pulling whisper.cpp in.
