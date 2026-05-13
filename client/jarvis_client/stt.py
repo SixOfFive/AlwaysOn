@@ -13,6 +13,8 @@ import logging
 import time
 
 import numpy as np
+
+from jarvis_client import _cuda  # noqa: F401 — side-effect: register CUDA DLLs
 from faster_whisper import WhisperModel
 
 log = logging.getLogger(__name__)
