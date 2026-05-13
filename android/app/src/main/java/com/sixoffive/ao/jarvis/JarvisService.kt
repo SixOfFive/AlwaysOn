@@ -16,6 +16,7 @@ import com.sixoffive.ao.jarvis.net.JarvisWsClient
 import com.sixoffive.ao.jarvis.stt.ModelStore
 import com.sixoffive.ao.jarvis.stt.SpeechToText
 import com.sixoffive.ao.jarvis.stt.SystemStt
+import com.sixoffive.ao.jarvis.stt.TranscriptLog
 import com.sixoffive.ao.jarvis.stt.WhisperStt
 import com.sixoffive.ao.jarvis.trigger.Trigger
 import com.sixoffive.ao.jarvis.tts.Tts
@@ -47,6 +48,7 @@ class JarvisService : Service() {
     private var ws: JarvisWsClient? = null
     private var tts: Tts? = null
     private var pipelineJob: Job? = null
+    private var transcriptLog: TranscriptLog? = null
     private val speakLock = Mutex()  // serialize TTS, drop transcripts while speaking
     @Volatile private var speaking = false
 
@@ -74,6 +76,7 @@ class JarvisService : Service() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification(), micForegroundType())
 
+        transcriptLog = TranscriptLog(applicationContext)
         tts = Tts(applicationContext)
         val client = if (serverUrl.isNotBlank()) {
             JarvisWsClient(serverUrl, clientId = Build.MODEL ?: "android-mic").also { it.connect() }
@@ -107,6 +110,7 @@ class JarvisService : Service() {
                                 _events.tryEmit(UiEvent.Status("connected: ${ev.sessionId}"))
                             }
                             is JarvisWsClient.Event.Said -> {
+                                transcriptLog?.say(ev.text)
                                 _events.tryEmit(UiEvent.Said(ev.text))
                                 speakLock.withLock {
                                     speaking = true
@@ -131,9 +135,11 @@ class JarvisService : Service() {
             // STT transcripts -> print + trigger -> server.
             speech.start().collect { transcript ->
                 if (speaking) return@collect  // ignore our own voice
+                transcriptLog?.stt(transcript)
                 _events.tryEmit(UiEvent.Transcript(transcript))
 
                 val cmd = Trigger.extract(transcript) ?: return@collect
+                transcriptLog?.cmd(cmd)
                 _events.tryEmit(UiEvent.Triggered(cmd))
                 Log.i(TAG, "trigger -> $cmd")
                 client?.sendCommand(cmd)
@@ -147,6 +153,7 @@ class JarvisService : Service() {
         stt?.close(); stt = null
         ws?.close(); ws = null
         tts?.shutdown(); tts = null
+        transcriptLog = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
