@@ -5,6 +5,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Force Release config even when AGP's debug variant injects Debug. The
+# default debug flags include -O0 which makes whisper.cpp unusable. We
+# overwrite both the cache entry AND the per-config flag variables so a
+# stale CMakeCache.txt can't undo this.
+set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_DEBUG   "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+
+message(STATUS "jarvis_native build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "jarvis_native C flags:   ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}")
+message(STATUS "jarvis_native CXX flags: ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
+
 # --- whisper.cpp via FetchContent ------------------------------------------
 # Pinned tag — bump deliberately when you want a newer build. Configure-time
 # git clone happens once per Gradle clean; afterwards CMake reuses the cache
