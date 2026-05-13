@@ -5,6 +5,15 @@ CUDA Whisper, a local Ollama LLM for tool routing, and Obsidian vault
 integration for "what was I working on" style queries. Clients on
 Windows, Linux, and Android speak the same WebSocket protocol.
 
+> ⚠️ **Work in progress.** This is active development, not a release.
+> Expect rough edges, breaking changes between commits, and possibly
+> critical or fatal bugs — clients have crashed, the server has hung,
+> the LLM has produced wrong tool calls. The audio pipeline writes to
+> your filesystem (dictation logs, save_code) and pulls models from the
+> network; review what you're running before pointing it at anything
+> sensitive. No guarantees; use at your own risk. PRs and bug reports
+> welcome but the architecture may change without notice.
+
 ## Architecture
 
 ```
