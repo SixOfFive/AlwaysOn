@@ -22,7 +22,10 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeInit(
     LOGI("loading model: %s", path);
 
     whisper_context_params cparams = whisper_context_default_params();
-    cparams.use_gpu = false;  // Android: CPU only
+    // Try Vulkan if available (built in via GGML_VULKAN=ON). whisper.cpp
+    // falls back to CPU automatically if the device or driver doesn't
+    // support compute shaders.
+    cparams.use_gpu = true;
 
     whisper_context* ctx = whisper_init_from_file_with_params(path, cparams);
     env->ReleaseStringUTFChars(modelPath, path);
