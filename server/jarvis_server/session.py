@@ -21,6 +21,7 @@ from jarvis_server.router import Router
 from jarvis_server.stt import STT
 from jarvis_shared import (
     PROTOCOL_VERSION,
+    Command,
     EndUtterance,
     ErrorMsg,
     Hello,
@@ -112,6 +113,11 @@ class Session:
             self._audio.clear()
             await self._on_utterance(buf)
 
+        elif isinstance(msg, Command):
+            # Client transcribed locally; just route the text.
+            log.info("command: %r", msg.text)
+            await self._on_text(msg.text)
+
         elif msg.type == "ping":
             await self._send(Pong())
 
@@ -126,13 +132,15 @@ class Session:
     async def _on_utterance(self, pcm: bytes) -> None:
         if len(pcm) < 4_000:  # < 0.125s — discard tap/noise
             log.info("utterance too short (%d bytes), discarding", len(pcm))
-            await self._send(Say(text=""))  # release client back to IDLE quietly
+            await self._send(Say(text=""))
             return
 
         await self._send(Thinking(note="transcribing"))
         text = await self.stt.transcribe(pcm)
         await self._send(Transcript(text=text, final=True))
+        await self._on_text(text)
 
+    async def _on_text(self, text: str) -> None:
         if not text.strip():
             await self._send(Say(text="I didn't catch that."))
             return

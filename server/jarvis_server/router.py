@@ -23,6 +23,10 @@ log = logging.getLogger(__name__)
 _FAST_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(what\s*(?:'s| is)?\s*the\s+time|what\s+time\s+is\s+it)\b", re.I), "get_time"),
     (re.compile(r"\b(what\s*(?:'s| is)?\s*the\s+date|what\s+day\s+is\s+(?:it|today)|today's\s+date)\b", re.I), "get_date"),
+    # Plain "what's the weather" → default location. Claude still gets
+    # invoked for "weather in Tokyo" type queries that need an argument.
+    (re.compile(r"\bwhat\s*(?:'s| is)?\s*the\s+weather\b(?!\s+(?:in|at|for)\b)", re.I), "get_weather"),
+    (re.compile(r"\bweather\s*(?:like|report|outside)?\s*\??$", re.I), "get_weather"),
 ]
 
 

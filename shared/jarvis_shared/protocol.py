@@ -37,6 +37,14 @@ class EndUtterance(BaseModel):
     type: Literal["end_utterance"] = "end_utterance"
 
 
+class Command(BaseModel):
+    """Client already transcribed locally; this is the parsed command
+    text to act on. Use this instead of Wake+audio+EndUtterance when STT
+    runs on the client."""
+    type: Literal["command"] = "command"
+    text: str
+
+
 class Cancel(BaseModel):
     type: Literal["cancel"] = "cancel"
 
@@ -86,7 +94,7 @@ class Pong(BaseModel):
 # Tagged union for parsing any inbound control frame.
 ControlMessage = Annotated[
     Union[
-        Hello, Wake, EndUtterance, Cancel, Ping,
+        Hello, Wake, EndUtterance, Command, Cancel, Ping,
         Welcome, Transcript, Thinking, Say, ErrorMsg, Pong,
     ],
     Field(discriminator="type"),

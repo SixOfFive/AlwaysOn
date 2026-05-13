@@ -16,6 +16,7 @@ from jarvis_server.stt import STT
 from jarvis_server.tools import ToolRegistry
 from jarvis_server.tools.builtin import builtin_tools
 from jarvis_server.tools.vault import VaultClient, vault_tools
+from jarvis_server.tools.weather import weather_tools
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ def create_app(config: Config | None = None) -> FastAPI:
 
         registry = ToolRegistry()
         for tool in builtin_tools():
+            registry.register(tool)
+        for tool in weather_tools():
             registry.register(tool)
 
         vault: VaultClient | None = None

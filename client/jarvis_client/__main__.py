@@ -23,7 +23,15 @@ def main() -> None:
             "synthetic: wire smoke test."
         ),
     )
-    parser.add_argument("--server", default="ws://127.0.0.1:7333/ws")
+    parser.add_argument(
+        "--server",
+        default=None,
+        help=(
+            "WebSocket URL of jarvis-server. In transcribe mode this is "
+            "optional — without it, the client only prints transcripts. "
+            "Required for live/synthetic modes. Example: ws://127.0.0.1:7333/ws"
+        ),
+    )
     parser.add_argument("--id", dest="client_id", default=f"{socket.gethostname()}-mic")
     parser.add_argument("--log-level", default="info")
     parser.add_argument(
@@ -73,12 +81,15 @@ def main() -> None:
                 stt_compute_type=args.stt_compute_type,
                 speech_threshold=args.speech_threshold,
                 min_silence_ms=args.min_silence_ms,
+                server_url=args.server,
+                client_id=args.client_id,
             ))
         else:
             # live / synthetic still go through the server.
+            server_url = args.server or "ws://127.0.0.1:7333/ws"
             from jarvis_client.main import run as run_with_server
             asyncio.run(run_with_server(
-                server_url=args.server,
+                server_url=server_url,
                 client_id=args.client_id,
                 mode=args.mode,
                 audio_device=device,
