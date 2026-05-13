@@ -19,11 +19,15 @@ import java.nio.LongBuffer
  */
 class VadSegmenter(
     context: Context,
-    private val speechThreshold: Float = 0.5f,
+    private val speechThreshold: Float = 0.4f,
     private val minSilenceMs: Int = 700,
     private val speechPadMs: Int = 200,
     private val maxSegmentMs: Int = 20_000,
 ) : AutoCloseable {
+
+    private var chunksSeen = 0
+    private var probSum = 0.0f
+    private var probMax = 0.0f
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val session: OrtSession
@@ -72,6 +76,16 @@ class VadSegmenter(
 
         val prob = run(chunk)
         val isSpeech = prob >= speechThreshold
+
+        // Periodic diagnostic — every ~1s of audio, log avg & max prob.
+        chunksSeen++
+        probSum += prob
+        if (prob > probMax) probMax = prob
+        if (chunksSeen >= 32) {
+            Log.i(TAG, "vad over last ~1s: avg=%.3f max=%.3f thr=%.2f"
+                .format(probSum / chunksSeen, probMax, speechThreshold))
+            chunksSeen = 0; probSum = 0.0f; probMax = 0.0f
+        }
 
         if (isSpeech) {
             if (!inSpeech) {
