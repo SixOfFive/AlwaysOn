@@ -94,7 +94,9 @@ class WhisperStt(
                     Log.w(TAG, "VAD threw on a chunk; dropping it", exc)
                     null
                 } ?: return@collect
+                Log.i(TAG, "launching transcribe (${segment.size} samples)")
                 launch {
+                    Log.i(TAG, "transcribe coroutine entered")
                     try { transcribe(segment) }
                     catch (exc: Throwable) { Log.w(TAG, "transcribe failed", exc) }
                 }
@@ -135,16 +137,26 @@ class WhisperStt(
         segmenter?.close()
         segmenter = null
         capture = null
-        // Holding whisperLock blocks until any in-flight nativeTranscribe
-        // has returned — otherwise nativeFree below would race against it
-        // and segfault inside ggml.
-        synchronized(whisperLock) {
-            val handle = ctxHandle
-            if (handle != 0L) {
-                ctxHandle = 0L
-                WhisperNative.nativeFree(handle)
-            }
+
+        // Zero the handle. ctxHandle is @Volatile so the write is visible to
+        // any thread about to enter the whisperLock block. Threads already
+        // inside the lock have a local copy of the old handle and will
+        // finish their nativeTranscribe normally before the worker below
+        // acquires the lock to free.
+        //
+        // The actual nativeFree happens on a dedicated thread so close()
+        // returns immediately — it's called from JarvisService.onStartCommand
+        // on the main thread and blocking here ANRs the app.
+        val handle = ctxHandle
+        ctxHandle = 0L
+        if (handle != 0L) {
+            Thread({
+                synchronized(whisperLock) {
+                    WhisperNative.nativeFree(handle)
+                }
+            }, "whisper-free").start()
         }
+
         scope.cancel()
     }
 
