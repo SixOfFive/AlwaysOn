@@ -1,9 +1,11 @@
 """Per-client WebSocket session.
 
-State machine: HELLO → idle → (wake → audio frames → end_utterance → reply)*
+State machine: HELLO -> idle -> (wake -> audio frames -> end_utterance ->
+STT -> router -> say)*
 
-Audio frames between Wake and EndUtterance are PCM (s16le, 16kHz, mono).
-Today they're just counted; STT plumbing lands next.
+Audio frames between Wake and EndUtterance are raw PCM (s16le, 16 kHz,
+mono). They get accumulated into a single bytes buffer that's handed to
+faster-whisper at end-of-utterance.
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from jarvis_server.router import Router
+from jarvis_server.stt import STT
 from jarvis_shared import (
     PROTOCOL_VERSION,
     EndUtterance,
@@ -22,6 +26,7 @@ from jarvis_shared import (
     Hello,
     Pong,
     Say,
+    Thinking,
     Transcript,
     Wake,
     Welcome,
@@ -32,12 +37,14 @@ log = logging.getLogger(__name__)
 
 
 class Session:
-    def __init__(self, ws: WebSocket) -> None:
+    def __init__(self, ws: WebSocket, *, stt: STT, router: Router) -> None:
         self.ws = ws
+        self.stt = stt
+        self.router = router
         self.client_id: str | None = None
         self.hostname: str | None = None
-        self.audio_frames = 0
-        self.audio_bytes = 0
+        self._audio = bytearray()
+        self._in_utterance = False
 
     async def run(self) -> None:
         try:
@@ -83,10 +90,8 @@ class Session:
 
             if (data := event.get("text")) is not None:
                 await self._on_control(data)
-            elif (data := event.get("bytes")) is not None:
-                # PCM frame during an active utterance.
-                self.audio_frames += 1
-                self.audio_bytes += len(data)
+            elif (data := event.get("bytes")) is not None and self._in_utterance:
+                self._audio.extend(data)
 
     async def _on_control(self, raw: str) -> None:
         try:
@@ -97,28 +102,49 @@ class Session:
             return
 
         if isinstance(msg, Wake):
-            self.audio_frames = 0
-            self.audio_bytes = 0
+            self._audio.clear()
+            self._in_utterance = True
             log.info("wake: keyword=%r conf=%.2f", msg.keyword, msg.confidence)
 
         elif isinstance(msg, EndUtterance):
-            log.info(
-                "end_utterance: %d frames / %d bytes buffered",
-                self.audio_frames, self.audio_bytes,
-            )
-            # Stub: until STT is wired up, echo a placeholder.
-            await self._send(Transcript(text="(stt not wired yet)", final=True))
-            await self._send(Say(text="I heard you, but my ears are not connected yet."))
+            self._in_utterance = False
+            buf = bytes(self._audio)
+            self._audio.clear()
+            await self._on_utterance(buf)
 
         elif msg.type == "ping":
             await self._send(Pong())
 
         elif msg.type == "cancel":
+            self._in_utterance = False
+            self._audio.clear()
             log.info("cancel")
 
         else:
             log.warning("unexpected control frame from client: %s", msg.type)
 
+    async def _on_utterance(self, pcm: bytes) -> None:
+        if len(pcm) < 4_000:  # < 0.125s — discard tap/noise
+            log.info("utterance too short (%d bytes), discarding", len(pcm))
+            await self._send(Say(text=""))  # release client back to IDLE quietly
+            return
+
+        await self._send(Thinking(note="transcribing"))
+        text = await self.stt.transcribe(pcm)
+        await self._send(Transcript(text=text, final=True))
+
+        if not text.strip():
+            await self._send(Say(text="I didn't catch that."))
+            return
+
+        await self._send(Thinking(note="routing"))
+        try:
+            reply = await self.router.handle(text)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("router crashed")
+            reply = f"Something went wrong: {exc}"
+
+        await self._send(Say(text=reply))
+
     async def _send(self, msg: object) -> None:
-        # Pydantic model → JSON string. model_dump_json keeps it tight.
         await self.ws.send_text(msg.model_dump_json())  # type: ignore[attr-defined]

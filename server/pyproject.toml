@@ -11,6 +11,10 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.6",
+    "numpy>=1.26",
+    "faster-whisper>=1.1",
+    "anthropic>=0.40",
+    "mcp>=1.0",
     "jarvis-shared",
 ]
 

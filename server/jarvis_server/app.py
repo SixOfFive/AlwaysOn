@@ -1,35 +1,85 @@
-"""FastAPI application. Today: one WebSocket endpoint and a health check.
-Later: HTTP routes for serving pre-rendered TTS audio."""
+"""FastAPI application — wires together STT, tools, Claude, and the
+WebSocket endpoint. All heavy components load once at startup."""
 
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket
 
+from jarvis_server.claude import ClaudeRouter
+from jarvis_server.config import Config
+from jarvis_server.router import Router
 from jarvis_server.session import Session
+from jarvis_server.stt import STT
+from jarvis_server.tools import ToolRegistry
+from jarvis_server.tools.builtin import builtin_tools
+from jarvis_server.tools.vault import VaultClient, vault_tools
 
 log = logging.getLogger(__name__)
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="jarvis-server")
-    client_count = {"n": 0}
+def create_app(config: Config | None = None) -> FastAPI:
+    cfg = config or Config()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        log.info("startup")
+        app.state.stt = STT(
+            model_name=cfg.stt_model,
+            device=cfg.stt_device,
+            compute_type=cfg.stt_compute_type,
+        )
+
+        registry = ToolRegistry()
+        for tool in builtin_tools():
+            registry.register(tool)
+
+        vault: VaultClient | None = None
+        if cfg.vault_disabled:
+            log.info("vault MCP disabled by config")
+        else:
+            vault = VaultClient(cfg.vault_command, cfg.vault_args)
+            try:
+                await vault.start()
+                for tool in vault_tools(vault):
+                    registry.register(tool)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("vault MCP failed to start (%s); continuing without it", exc)
+                vault = None
+
+        claude = ClaudeRouter.try_create(registry, model=cfg.claude_model)
+        app.state.router = Router(registry, claude)
+        app.state.client_count = 0
+
+        try:
+            yield
+        finally:
+            log.info("shutdown")
+            if vault is not None:
+                await vault.close()
+
+    app = FastAPI(title="jarvis-server", lifespan=lifespan)
 
     @app.get("/healthz")
     def healthz() -> dict[str, object]:
-        return {"ok": True, "clients": client_count["n"]}
+        return {"ok": True, "clients": getattr(app.state, "client_count", 0)}
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
         await websocket.accept()
-        client_count["n"] += 1
+        app.state.client_count += 1
         try:
-            session = Session(websocket)
+            session = Session(
+                websocket,
+                stt=app.state.stt,
+                router=app.state.router,
+            )
             await session.run()
-        except Exception as exc:  # noqa: BLE001 — final-stop logging
+        except Exception as exc:  # noqa: BLE001
             log.exception("session crashed: %s", exc)
         finally:
-            client_count["n"] -= 1
+            app.state.client_count -= 1
 
     return app
