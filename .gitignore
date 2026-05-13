@@ -42,6 +42,18 @@ recordings/
 *.log
 logs/
 
+# Android Studio / Gradle
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/captures/
+android/local.properties
+android/.cxx/
+*.iml
+*.apk
+*.aab
+
 # OS junk
 Thumbs.db
 .DS_Store

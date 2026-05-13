@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple stylized "J" — placeholder; user can swap via Android Studio's
+         Image Asset Studio. -->
+    <path
+        android:fillColor="#5DA9FF"
+        android:pathData="M62,30 L72,30 L72,68 C72,77 65,84 56,84 C47,84 40,77 40,68 L40,62 L48,62 L48,68 C48,73 51,76 56,76 C61,76 64,73 64,68 L64,30 Z" />
+</vector>
