@@ -97,8 +97,13 @@ class WhisperStt(
                 Log.i(TAG, "launching transcribe (${segment.size} samples)")
                 launch {
                     Log.i(TAG, "transcribe coroutine entered")
-                    try { transcribe(segment) }
-                    catch (exc: Throwable) { Log.w(TAG, "transcribe failed", exc) }
+                    try {
+                        transcribe(segment)
+                    } catch (_: kotlinx.coroutines.CancellationException) {
+                        // expected on Stop — not an error
+                    } catch (exc: Throwable) {
+                        Log.w(TAG, "transcribe failed", exc)
+                    }
                 }
             }
         }
@@ -111,8 +116,13 @@ class WhisperStt(
             return
         }
         val t0 = System.currentTimeMillis()
-        val text = withContext(Dispatchers.Default) {
-            synchronized(whisperLock) {
+        // Do the logging and the emit INSIDE withContext. After withContext
+        // returns, the coroutine machinery checks cancellation and may throw
+        // CancellationException — in which case the lines below would never
+        // run and a finished transcript would be silently dropped. tryEmit
+        // is non-suspending so it completes synchronously inside the block.
+        withContext(Dispatchers.Default) {
+            val text = synchronized(whisperLock) {
                 val handle = ctxHandle
                 if (handle == 0L) return@synchronized ""
                 WhisperNative.nativeTranscribe(
@@ -122,12 +132,12 @@ class WhisperStt(
                     language,
                 )
             }
-        }
-        val elapsed = System.currentTimeMillis() - t0
-        val cleaned = text.trim()
-        Log.i(TAG, "transcribe: ${audio.size} samples in ${elapsed}ms -> ${cleaned.length} chars")
-        if (cleaned.isNotEmpty()) {
-            transcripts.tryEmit(cleaned)
+            val elapsed = System.currentTimeMillis() - t0
+            val cleaned = text.trim()
+            Log.i(TAG, "transcribe: ${audio.size} samples in ${elapsed}ms -> ${cleaned.length} chars")
+            if (cleaned.isNotEmpty()) {
+                transcripts.tryEmit(cleaned)
+            }
         }
     }
 
