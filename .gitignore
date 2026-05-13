@@ -39,6 +39,11 @@ jarvis.toml
 braindump_ao.md
 private/
 
+# Per-host model banlist (Ollama tags the catalog picker should skip).
+# Auto-populated when a chat call times out — its content depends on
+# the local GPU/VRAM and shouldn't ship with the repo.
+model-banlist.txt
+
 # Model weights and audio scratch
 models/
 *.bin

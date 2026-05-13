@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from jarvis_server import banlist
 from jarvis_server.conversation import Conversation
 from jarvis_server.tools import ToolRegistry
 
@@ -110,6 +111,20 @@ class OllamaRouter:
             try:
                 r = await self.client.post(f"{self.base_url}/api/chat", json=payload)
                 r.raise_for_status()
+            except httpx.TimeoutException as exc:
+                # Timeouts almost always mean the model overflowed VRAM
+                # and is grinding partially on CPU. Auto-ban so the next
+                # server restart picks something smaller / quantized.
+                log.error("ollama call timed out (%s) — auto-banning %s",
+                          exc, self.model)
+                banlist.add(self.model, reason="chat call timed out")
+                fail = (
+                    f"The local model timed out and was just banned from "
+                    f"future picks. Restart the server to load a smaller "
+                    f"model."
+                )
+                conversation.add_assistant_text(fail)
+                return fail
             except httpx.HTTPError as exc:
                 log.exception("ollama call failed")
                 fail = f"The local model didn't respond: {exc}"

@@ -341,6 +341,37 @@ If you ever need to swap models mid-session (e.g. via
 `JARVIS_OLLAMA_MODEL`), restart the server: there's no graceful
 "unload the previous model" hook because we never want one.
 
+### Model banlist
+
+The catalog reports `estimatedVramGb` but it's an estimate — when a
+picked model spills out of VRAM to CPU you'll see chat calls hang for
+the full request timeout (~90-120 s). When that happens the router
+**auto-appends the running model tag to `model-banlist.txt`** and
+replies with "the local model timed out and was just banned from
+future picks. Restart the server to load a smaller model."
+
+On the next startup the picker filters out anything in the banlist and
+the catalog's next-best fit gets selected automatically. You'll see
+this in the log:
+
+```
+[server] INFO jarvis_server.app — banlist active: skipping 1 model(s) — gemma4:e4b
+[server] INFO jarvis_server.app — model pick: <next-tag> — ...
+```
+
+The file is gitignored (it's per-host — your VRAM, your bans). Format:
+plain text, one Ollama tag per line, `#` for comments:
+
+```
+# Ollama tags the catalog picker should skip on this host.
+gemma4:e4b   # spilled to CPU on this 16 GB card
+qwen2.5:32b  # too slow even when it fits
+```
+
+You can hand-edit anytime. Delete the file (or remove a line) to put a
+model back in rotation. Override the path with `JARVIS_BANLIST=<path>`
+if you want the banlist somewhere else.
+
 ## Environment variables
 
 All optional. CMD examples below; PowerShell uses `$env:NAME = "value"`.

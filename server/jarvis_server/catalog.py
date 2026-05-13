@@ -126,24 +126,30 @@ def pick_model(
     vram_budget_gb: float,
     min_context: int,
     preferred_server: str,
+    banned: set[str] | None = None,
 ) -> ModelChoice | None:
     """Filter and rank catalog entries, return the best fit or None.
 
     Selection criteria (in order):
       1. capabilities contains "tools" (hard filter)
-      2. estimatedVramGb <= vram_budget_gb
-      3. contextLength >= min_context
-      4. has a roleScores.<role> entry (so we have a benchmark to rank on)
+      2. tag not in `banned` — auto-populated when a previous run's
+         pick timed out (see banlist.py)
+      3. estimatedVramGb <= vram_budget_gb
+      4. contextLength >= min_context
+      5. has a roleScores.<role> entry (so we have a benchmark to rank on)
     Ranking:
       - roleScores.<role>.score desc
       - installed locally on preferred_server desc (tiebreak)
       - avgTokSec desc (final tiebreak, faster wins)
     """
+    banned = banned or set()
     candidates: list[tuple[float, int, float, str, dict[str, Any]]] = []
     for tag, entry in catalog.items():
         if tag.startswith("_"):
             continue
         if not isinstance(entry, dict):
+            continue
+        if tag in banned:
             continue
         caps = entry.get("capabilities") or []
         if "tools" not in caps:

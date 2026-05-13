@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket
 
+from jarvis_server import banlist
 from jarvis_server.catalog import load_catalog, pick_model
 from jarvis_server.config import Config
 from jarvis_server.ollama_router import OllamaRouter, ensure_pulled
@@ -48,15 +49,21 @@ async def _build_llm_router(
         except Exception as exc:  # noqa: BLE001
             log.warning("catalog load failed (%s); LLM disabled", exc)
             return None
+        banned = banlist.read()
+        if banned:
+            log.info("banlist active: skipping %d model(s) — %s",
+                     len(banned), ", ".join(sorted(banned)))
         choice = pick_model(
             catalog,
             vram_budget_gb=cfg.ollama_vram_budget_gb,
             min_context=cfg.ollama_context_length,
             preferred_server=cfg.ollama_server_name,
+            banned=banned,
         )
         if choice is None:
             log.warning(
-                "no catalog model fits constraints (vram<=%.0fGB, ctx>=%d, tools); LLM disabled",
+                "no catalog model fits constraints (vram<=%.0fGB, ctx>=%d, tools, "
+                "not in banlist); LLM disabled",
                 cfg.ollama_vram_budget_gb, cfg.ollama_context_length,
             )
             return None
