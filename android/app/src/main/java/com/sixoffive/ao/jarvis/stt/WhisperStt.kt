@@ -14,8 +14,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -39,7 +37,10 @@ class WhisperStt(
     private var capture: AudioCapture? = null
     private var segmenter: VadSegmenter? = null
     @Volatile private var ctxHandle: Long = 0L
-    private val whisperLock = Mutex()  // whisper.cpp ctx isn't thread-safe
+    // Plain Java lock so close() — which is not suspendable — can wait for
+    // any in-flight nativeTranscribe before freeing the whisper context.
+    // (Kotlin's Mutex is suspend-only and would not block close().)
+    private val whisperLock = Object()
 
     private val transcripts = MutableSharedFlow<String>(
         extraBufferCapacity = 16,
@@ -107,11 +108,11 @@ class WhisperStt(
             Log.i(TAG, "segment too short (${audio.size} samples), dropping")
             return
         }
-        whisperLock.withLock {
-            val handle = ctxHandle
-            if (handle == 0L) return
-            val t0 = System.currentTimeMillis()
-            val text = withContext(Dispatchers.Default) {
+        val t0 = System.currentTimeMillis()
+        val text = withContext(Dispatchers.Default) {
+            synchronized(whisperLock) {
+                val handle = ctxHandle
+                if (handle == 0L) return@synchronized ""
                 WhisperNative.nativeTranscribe(
                     handle,
                     audio,
@@ -119,12 +120,12 @@ class WhisperStt(
                     language,
                 )
             }
-            val elapsed = System.currentTimeMillis() - t0
-            val cleaned = text.trim()
-            Log.i(TAG, "transcribe: ${audio.size} samples in ${elapsed}ms -> ${cleaned.length} chars")
-            if (cleaned.isNotEmpty()) {
-                transcripts.tryEmit(cleaned)
-            }
+        }
+        val elapsed = System.currentTimeMillis() - t0
+        val cleaned = text.trim()
+        Log.i(TAG, "transcribe: ${audio.size} samples in ${elapsed}ms -> ${cleaned.length} chars")
+        if (cleaned.isNotEmpty()) {
+            transcripts.tryEmit(cleaned)
         }
     }
 
@@ -134,10 +135,15 @@ class WhisperStt(
         segmenter?.close()
         segmenter = null
         capture = null
-        val handle = ctxHandle
-        if (handle != 0L) {
-            ctxHandle = 0L
-            WhisperNative.nativeFree(handle)
+        // Holding whisperLock blocks until any in-flight nativeTranscribe
+        // has returned — otherwise nativeFree below would race against it
+        // and segfault inside ggml.
+        synchronized(whisperLock) {
+            val handle = ctxHandle
+            if (handle != 0L) {
+                ctxHandle = 0L
+                WhisperNative.nativeFree(handle)
+            }
         }
         scope.cancel()
     }
