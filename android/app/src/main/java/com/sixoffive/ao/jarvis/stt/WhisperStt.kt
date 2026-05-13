@@ -67,18 +67,30 @@ class WhisperStt(
             val seg = VadSegmenter(context).also { segmenter = it }
 
             cap.stream(context).collect { chunk ->
-                val segment = seg.feed(chunk) ?: return@collect
-                launch { transcribe(segment) }
+                val segment = try {
+                    seg.feed(chunk)
+                } catch (exc: Throwable) {
+                    Log.w(TAG, "VAD threw on a chunk; dropping it", exc)
+                    null
+                } ?: return@collect
+                launch {
+                    try { transcribe(segment) }
+                    catch (exc: Throwable) { Log.w(TAG, "transcribe failed", exc) }
+                }
             }
         }
         return transcripts.asSharedFlow()
     }
 
     private suspend fun transcribe(audio: FloatArray) {
-        if (audio.size < 4_000) return  // < 0.25s — drop tap/noise
+        if (audio.size < 4_000) {
+            Log.i(TAG, "segment too short (${audio.size} samples), dropping")
+            return
+        }
         whisperLock.withLock {
             val handle = ctxHandle
             if (handle == 0L) return
+            val t0 = System.currentTimeMillis()
             val text = withContext(Dispatchers.Default) {
                 WhisperNative.nativeTranscribe(
                     handle,
@@ -87,7 +99,9 @@ class WhisperStt(
                     language,
                 )
             }
+            val elapsed = System.currentTimeMillis() - t0
             val cleaned = text.trim()
+            Log.i(TAG, "transcribe: ${audio.size} samples in ${elapsed}ms -> ${cleaned.length} chars")
             if (cleaned.isNotEmpty()) {
                 transcripts.tryEmit(cleaned)
             }

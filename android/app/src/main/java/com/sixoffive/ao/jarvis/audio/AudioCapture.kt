@@ -64,10 +64,12 @@ class AudioCapture {
                     Log.w(TAG, "AudioRecord.read returned $n")
                     continue
                 }
+                // Drop partial reads — downstream (Silero VAD) is strict
+                // about chunk size and would crash if we emitted them.
                 if (n == CHUNK_SAMPLES) {
                     trySendOrLog(this, buf.copyOf())
                 } else {
-                    trySendOrLog(this, buf.copyOf(n))
+                    Log.w(TAG, "skipping partial chunk of $n samples")
                 }
             }
             Log.i(TAG, "audio-capture thread exiting")

@@ -61,8 +61,10 @@ class VadSegmenter(
 
     /** @return finished segment (16 kHz float32 in [-1,1]) when speech ends, else null. */
     fun feed(chunk: ShortArray): FloatArray? {
-        require(chunk.size == CHUNK_SAMPLES) { "expected $CHUNK_SAMPLES samples, got ${chunk.size}" }
+        if (chunk.size != CHUNK_SAMPLES) return null  // partial chunk; skip
 
+        // Maintain a rolling pre-roll buffer of the most recent chunks while
+        // we're idle, so the first phoneme isn't clipped on speech-start.
         if (!inSpeech) {
             preRoll.addLast(chunk)
             while (preRoll.size > preRollMax) preRoll.removeFirst()
@@ -75,15 +77,17 @@ class VadSegmenter(
             if (!inSpeech) {
                 inSpeech = true
                 buffer.clear()
-                // Include pre-roll so we don't clip the first phoneme.
+                // Include pre-roll (already contains the current chunk).
                 for (c in preRoll) {
                     for (s in c) buffer.add(s)
                 }
                 segmentMs = preRoll.size * CHUNK_MS
                 preRoll.clear()
+                Log.i(TAG, "speech start (prob=%.2f)".format(prob))
+            } else {
+                for (s in chunk) buffer.add(s)
+                segmentMs += CHUNK_MS
             }
-            for (s in chunk) buffer.add(s)
-            segmentMs += CHUNK_MS
             silentStreakMs = 0
         } else if (inSpeech) {
             for (s in chunk) buffer.add(s)
@@ -92,7 +96,10 @@ class VadSegmenter(
         }
 
         if (inSpeech && (silentStreakMs >= minSilenceMs || segmentMs >= maxSegmentMs)) {
-            return finish()
+            val durationMs = segmentMs
+            val segment = finish()
+            Log.i(TAG, "speech end: ${durationMs}ms, ${segment.size} samples")
+            return segment
         }
         return null
     }
