@@ -30,6 +30,9 @@ class WhisperStt(
     /** Called ~10x/sec with (peak amplitude 0..32767, VAD prob 0..1).
      *  Used by the UI to render live meters. */
     private val onMetric: ((peak: Int, prob: Float) -> Unit)? = null,
+    /** Called from whisper's worker thread with 0..100 during transcribe.
+     *  Cross to the main thread before touching the UI. */
+    private val onProgress: ((percent: Int) -> Unit)? = null,
 ) : SpeechToText {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -122,6 +125,11 @@ class WhisperStt(
         // run and a finished transcript would be silently dropped. tryEmit
         // is non-suspending so it completes synchronously inside the block.
         withContext(Dispatchers.Default) {
+            val listener = onProgress?.let {
+                object : WhisperNative.Listener {
+                    override fun onProgress(percent: Int) { it(percent) }
+                }
+            }
             val text = synchronized(whisperLock) {
                 val handle = ctxHandle
                 if (handle == 0L) return@synchronized ""
@@ -130,6 +138,7 @@ class WhisperStt(
                     audio,
                     /* nThreads = */ Runtime.getRuntime().availableProcessors().coerceAtMost(4),
                     language,
+                    listener,
                 )
             }
             val elapsed = System.currentTimeMillis() - t0

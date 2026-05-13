@@ -42,13 +42,46 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeFree(
     if (ctx) whisper_free(ctx);
 }
 
+// Callback context passed via progress_callback_user_data. Lives on the
+// stack of nativeTranscribe(); the only thing inside that the callback
+// reads is a JavaVM* + a global jobject + a cached method id, all of
+// which we set up before whisper_full and tear down after.
+struct ProgressCtx {
+    JavaVM*   jvm;
+    jobject   listener;     // global ref, may be null
+    jmethodID on_progress;  // void onProgress(int)
+    int       last_pct;     // throttle: only emit on change
+};
+
+static void progress_callback_thunk(
+        struct whisper_context* /*ctx*/,
+        struct whisper_state*   /*state*/,
+        int progress,
+        void* user_data) {
+    auto* pc = static_cast<ProgressCtx*>(user_data);
+    if (!pc || !pc->listener || !pc->jvm) return;
+    if (progress == pc->last_pct) return;
+    pc->last_pct = progress;
+
+    JNIEnv* env = nullptr;
+    bool need_detach = false;
+    if (pc->jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        if (pc->jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        need_detach = true;
+    }
+    env->CallVoidMethod(pc->listener, pc->on_progress, (jint)progress);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (need_detach) pc->jvm->DetachCurrentThread();
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeTranscribe(
         JNIEnv* env, jclass,
         jlong ctxHandle,
         jfloatArray audio,
         jint nThreads,
-        jstring languageCode) {
+        jstring languageCode,
+        jobject listener) {
 
     auto* ctx = reinterpret_cast<whisper_context*>(ctxHandle);
     if (!ctx) {
@@ -64,6 +97,21 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeTranscribe(
 
     const char* lang = env->GetStringUTFChars(languageCode, nullptr);
 
+    ProgressCtx pc{nullptr, nullptr, nullptr, -1};
+    if (listener != nullptr) {
+        env->GetJavaVM(&pc.jvm);
+        pc.listener = env->NewGlobalRef(listener);
+        jclass cls  = env->GetObjectClass(pc.listener);
+        pc.on_progress = env->GetMethodID(cls, "onProgress", "(I)V");
+        if (!pc.on_progress) {
+            // Couldn't resolve method — drop the callback rather than crash.
+            env->DeleteGlobalRef(pc.listener);
+            pc.listener = nullptr;
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        }
+        env->DeleteLocalRef(cls);
+    }
+
     whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     wparams.n_threads        = nThreads > 0 ? nThreads : 4;
     wparams.print_realtime   = false;
@@ -73,14 +121,19 @@ Java_com_sixoffive_ao_jarvis_stt_WhisperNative_nativeTranscribe(
     wparams.translate        = false;
     wparams.language         = lang;
     wparams.no_context       = true;
-    wparams.single_segment   = true;   // one utterance per call — don't try to chunk
+    wparams.single_segment   = true;
     wparams.temperature      = 0.0f;
+    if (pc.listener) {
+        wparams.progress_callback           = progress_callback_thunk;
+        wparams.progress_callback_user_data = &pc;
+    }
 
     LOGI("whisper_full: starting on %d samples, %d threads, lang=%s",
          (int)n, wparams.n_threads, lang);
     const int rc = whisper_full(ctx, wparams, samples.data(), n);
     LOGI("whisper_full: returned rc=%d", rc);
     env->ReleaseStringUTFChars(languageCode, lang);
+    if (pc.listener) env->DeleteGlobalRef(pc.listener);
     if (rc != 0) {
         LOGW("whisper_full failed");
         return env->NewStringUTF("");

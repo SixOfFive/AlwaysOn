@@ -89,6 +89,9 @@ class JarvisService : Service() {
                 onMetric = { peak, prob ->
                     _events.tryEmit(UiEvent.AudioMetric(peak, prob))
                 },
+                onProgress = { pct ->
+                    _events.tryEmit(UiEvent.Status("transcribing $pct%"))
+                },
             )
         }
         stt = speech
