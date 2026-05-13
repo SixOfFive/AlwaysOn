@@ -45,6 +45,12 @@ class WhisperStt(
     // (Kotlin's Mutex is suspend-only and would not block close().)
     private val whisperLock = Object()
 
+    // Cap the transcribe queue so a slow whisper doesn't pile up forever
+    // when the user keeps talking. Max 1 in-flight + 1 queued = 2.
+    // Additional segments past that are dropped with a warning so the
+    // pipeline stays responsive.
+    private val inFlight = java.util.concurrent.atomic.AtomicInteger(0)
+
     private val transcripts = MutableSharedFlow<String>(
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -97,7 +103,13 @@ class WhisperStt(
                     Log.w(TAG, "VAD threw on a chunk; dropping it", exc)
                     null
                 } ?: return@collect
+
+                if (inFlight.get() >= MAX_INFLIGHT) {
+                    Log.w(TAG, "transcribe queue full (${inFlight.get()}) — dropping ${segment.size}-sample segment")
+                    return@collect
+                }
                 Log.i(TAG, "launching transcribe (${segment.size} samples)")
+                inFlight.incrementAndGet()
                 launch {
                     Log.i(TAG, "transcribe coroutine entered")
                     try {
@@ -106,6 +118,8 @@ class WhisperStt(
                         // expected on Stop — not an error
                     } catch (exc: Throwable) {
                         Log.w(TAG, "transcribe failed", exc)
+                    } finally {
+                        inFlight.decrementAndGet()
                     }
                 }
             }
@@ -190,6 +204,9 @@ class WhisperStt(
 
     companion object {
         private const val TAG = "WhisperStt"
+        /** 1 running + 1 queued. Beyond this, new segments are dropped
+         *  to keep the pipeline responsive when whisper falls behind. */
+        private const val MAX_INFLIGHT = 2
 
         // Bracketed non-speech markers whisper emits on silence/noise.
         private val BRACKETED = Regex(

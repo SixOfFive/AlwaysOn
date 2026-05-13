@@ -81,23 +81,27 @@ class JarvisService : Service() {
         transcriptLog = TranscriptLog(applicationContext)
         tts = Tts(applicationContext)
 
-        // Load the intent classifier in parallel with the rest of the
-        // pipeline coming up; the first transcripts can fall back to the
-        // regex trigger until classifier is ready.
-        scope.launch {
-            val store = ModelStore(applicationContext)
-            if (!store.classifierIsCached()) {
-                Log.w(TAG, "classifier model not present — using regex fallback")
-                return@launch
-            }
-            val cls = Classifier.load(store.classifierFile.absolutePath)
-            if (cls == null) {
-                Log.w(TAG, "classifier failed to load — using regex fallback")
-                return@launch
-            }
-            classifier = cls
-            _events.tryEmit(UiEvent.Status("classifier loaded"))
-        }
+        // CLASSIFIER DISABLED for now. Even keeping the 500 MB GGUF model
+        // file mmap'd on disk + a 1 GB resident llama context appears to
+        // pressure whisper inference into pathological slowdown on this
+        // hardware (5x slower than realtime). Until we find a lighter
+        // classifier (sentence embeddings or similar), fall back to the
+        // regex Trigger. The model file stays on disk — just not loaded.
+        //
+        // scope.launch {
+        //     val store = ModelStore(applicationContext)
+        //     if (!store.classifierIsCached()) {
+        //         Log.w(TAG, "classifier model not present — using regex fallback")
+        //         return@launch
+        //     }
+        //     val cls = Classifier.load(store.classifierFile.absolutePath)
+        //     if (cls == null) {
+        //         Log.w(TAG, "classifier failed to load — using regex fallback")
+        //         return@launch
+        //     }
+        //     classifier = cls
+        //     _events.tryEmit(UiEvent.Status("classifier loaded"))
+        // }
         val client = if (serverUrl.isNotBlank()) {
             JarvisWsClient(serverUrl, clientId = Build.MODEL ?: "android-mic").also { it.connect() }
         } else {
