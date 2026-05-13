@@ -1,12 +1,14 @@
 package com.sixoffive.ao.jarvis.trigger
 
 /**
- * Detect the "jarvis" wake phrase in a transcript and return the command
- * text after it. Mirrors `client/jarvis_client/listen.py:extract_command`.
+ * Detect the wake phrase in a transcript and return the command text
+ * after it. "computer" is the chosen wake word — Whisper transcribes
+ * common English words much more reliably than proper nouns like
+ * "jarvis", which it routinely misheard as "Travis" / "Jervis" / "drives".
  */
 object Trigger {
     private val pattern = Regex(
-        """\b(?:hey\s+|ok\s+|okay\s+)?jarvis\b[\s,.\-:;!?]*""",
+        """\b(?:hey\s+|ok\s+|okay\s+)?computer\b[\s,.\-:;!?]*""",
         RegexOption.IGNORE_CASE,
     )
 

@@ -4,7 +4,7 @@
     <string name="start">Start listening</string>
     <string name="stop">Stop</string>
     <string name="notif_channel_listening">Listening</string>
-    <string name="notif_channel_listening_desc">Jarvis is listening for the trigger phrase.</string>
-    <string name="notif_listening_title">Jarvis is listening</string>
-    <string name="notif_listening_text">Tap to open. Say \"Jarvis\" followed by a command.</string>
+    <string name="notif_channel_listening_desc">Listening for the wake word "computer".</string>
+    <string name="notif_listening_title">Listening</string>
+    <string name="notif_listening_text">Tap to open. Say \"computer\" followed by a command.</string>
 </resources>
