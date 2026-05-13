@@ -19,6 +19,18 @@ set(GGML_OPENMP            OFF CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE         OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS      OFF CACHE BOOL "" FORCE)
 
+# Force aggressive optimization globally BEFORE pulling whisper.cpp in.
+# add_compile_options affects every target defined after this point,
+# including all of ggml + whisper that FetchContent_MakeAvailable adds.
+# Doing it here instead of per-target overrides means there's nothing
+# the AGP/CMake combo can silently strip.
+add_compile_options(
+    -O3
+    -ffast-math
+    -fno-finite-math-only  # whisper uses inf/nan intentionally
+    -DNDEBUG
+)
+
 FetchContent_Declare(
     whisper
     GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
@@ -40,18 +52,4 @@ target_link_libraries(jarvis_native
         log
 )
 
-# Force aggressive optimization on whisper.cpp + ggml regardless of the
-# Gradle build variant. Android Gradle's "debug" variant otherwise passes
-# CMAKE_BUILD_TYPE=Debug, which means -O0 — and whisper at -O0 is 10–50x
-# slower, effectively unusable on a phone. Doing this per-target rather
-# than globally so our own jarvis_native.cpp stays debuggable.
-foreach(tgt whisper ggml ggml-cpu ggml-base)
-    if(TARGET ${tgt})
-        target_compile_options(${tgt} PRIVATE
-            -O3
-            -DNDEBUG
-            -ffast-math
-            -fno-finite-math-only  # whisper uses inf/nan deliberately
-        )
-    endif()
-endforeach()
+# (optimization is applied globally above via add_compile_options.)
