@@ -229,22 +229,46 @@ Substitute your `trigger_phrase` for "Computer" if you changed it.
 | Category | Trigger examples | What it does |
 |---|---|---|
 | **Time** | "Computer, what time is it?" | tool: `get_time` |
-| **Date** | "Computer, what's the date?" / "what day is it" | tool: `get_date` |
+| **Date** | "Computer, what's the date?" | tool: `get_date` |
 | **Weather** | "Computer, what's the weather?" / "weather?" | tool: `get_weather` (default location only — anything more specific falls to LLM with conversation context) |
 | **Timer** | "Computer, set a five minute timer" / "30 second timer" | tool: `set_timer` |
 | **Note** | "Computer, note: pick up milk" / "remind me to call mom" | tool: `append_note` |
 | **Wake-on-LAN** | "Computer, wake bigiron" / "boot the nuc" | tool: `wake_on_lan` (host from `[wol].hosts`) |
 | **Web search** | "Computer, search for X" / "look up X" / "google X" | top DDG snippet via `web_search.top_snippet` |
 | **Math** | "what's 5 plus 7", "square root of 9", "25 percent of 80", "7 squared", "10 to the power of 3", "5 divided by 2" | local `math` module; `+`, `-`, `*`, `/`, `**`, sqrt, percent, squared, cubed |
-| **Unit conversion** | "convert 5 miles to km", "10 pounds in kg", "180 fahrenheit to celsius" | hardcoded tables for length, weight, temperature |
+| **Math: constants** | "what's pi", "what's e", "value of tau", "what's the golden ratio" | rounded to 4 decimals |
+| **Math: abs** | "absolute value of -5", "abs of -3.7" | `abs()` |
+| **Math: factorial** | "5 factorial", "factorial of 10", "8!" | `math.factorial` (capped at 20! for TTS sanity) |
+| **Math: log** | "log of 100", "natural log of 2.718", "log base 2 of 16" | `math.log`, `math.log10`, `math.log(x, base)` |
+| **Math: trig** | "sine of 30", "cosine of 90 degrees", "tan of 1 radian" | `math.sin/cos/tan`; degrees by default |
+| **Math: round** | "round 3.7", "floor of 9.2", "ceiling of 4.1" | `round`, `math.floor`, `math.ceil` |
+| **Math: modulo** | "10 mod 3", "100 modulo 7" | `%` |
+| **Math: is prime** | "is 17 prime", "is 100 a prime number" | trial division to √n |
+| **Base conversion** | "255 in binary", "16 in hex", "hex FF in decimal" | `bin/hex/oct` and `int(s, base)` |
+| **Unit conversion** | "convert 5 miles to km", "10 pounds in kg", "180 fahrenheit to celsius", "2 hours in minutes", "1 gallon to liters", "60 mph in kph" | tables for length, weight, time, volume, speed, plus non-linear temperature |
 | **Wikipedia** | "tell me about Alan Turing", "who was Marie Curie", "who's Nikola Tesla" | reuses the `wikipedia_summary` tool; trims to 2 sentences for TTS |
 | **Date math** | "in 3 days", "next Friday", "how many days until Saturday" | stdlib `datetime` |
+| **Yesterday / tomorrow** | "what was yesterday's date", "what's tomorrow's date" | today ± 1 day |
+| **Day of week** | "what day of the week is it", "what day is it" | `date.today().strftime('%A')` |
+| **Weekend check** | "is it the weekend", "is it a weekday" | weekday ≥ 5 |
+| **Month / year** | "what month is it", "what year is it" | `date.today().strftime('%B')` / `.year` |
+| **Unix time** | "what's the unix time", "epoch timestamp" | `int(time.time())` |
+| **UTC time** | "what's the UTC time", "GMT time" | `datetime.now(timezone.utc)` |
 | **Dice / random** | "flip a coin", "roll a die", "2d6", "d20", "pick a number between 1 and 100" | `random` module |
-| **Spelling** | "how do you spell python", "spell antidisestablishmentarianism" | letter-by-letter for single words ≤30 chars |
+| **Rock paper scissors** | "let's play rock paper scissors", "I pick rock" | randomized pick + winner detection |
+| **Pick from list** | "pick between pizza and sushi", "choose one of red green or blue" | splits on `,` / `and` / `or` → `random.choice` |
+| **Joke** | "tell me a joke", "say something funny", "make me laugh" | pool of ~10 corny one-liners |
+| **Echo / say X** | "say hello world", "repeat after me my name is Bob", "echo testing" | parrot the payload back through TTS |
+| **Spelling** | "how do you spell python" | letter-by-letter for single words ≤30 chars |
+| **Identity** | "what's your name", "who are you" | static "I'm Jarvis…" reply |
+| **Are you AI** | "are you a robot", "are you AI", "are you human", "are you sentient" | static reply, light variety |
 | **Chit-chat** | "hi", "thanks", "good morning", "stop", "never mind", "okay" | small static replies, randomized for variety |
 | **Help** | "what can you do", "help", "list your tools" | static capability summary |
 | **Repeat last** | "say that again", "repeat", "what did you say" | re-speaks the most recent assistant turn from conversation history |
-| **Model info** | "what model are you running", "which LLM", "model name" | reads `OllamaRouter.model` |
+| **Reset context (voice)** | "clear context", "forget everything", "start over" | wipes `conversation.messages`, replies "Okay, fresh start." |
+| **Model info** | "what model are you running", "which LLM" | reads `OllamaRouter.model` (with `:` stripped for TTS) |
+| **Uptime** | "how long have you been running", "server uptime" | seconds since `_START_TIME` was set at module import |
+| **WoL hosts list** | "what hosts can you wake", "list wake-on-lan hosts" | reads `JARVIS_HOSTS` JSON map |
 
 If anything misfires (a fast path catches a sentence it shouldn't, or
 misses one it should), the regex lives in `fastpath.py` — hand-edit and
