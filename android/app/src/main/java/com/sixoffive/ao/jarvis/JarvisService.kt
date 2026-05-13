@@ -13,8 +13,10 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.sixoffive.ao.jarvis.net.JarvisWsClient
+import com.sixoffive.ao.jarvis.stt.ModelStore
 import com.sixoffive.ao.jarvis.stt.SpeechToText
 import com.sixoffive.ao.jarvis.stt.SystemStt
+import com.sixoffive.ao.jarvis.stt.WhisperStt
 import com.sixoffive.ao.jarvis.trigger.Trigger
 import com.sixoffive.ao.jarvis.tts.Tts
 import kotlinx.coroutines.CoroutineScope
@@ -58,14 +60,15 @@ class JarvisService : Service() {
             }
             ACTION_START -> {
                 val server = intent.getStringExtra(EXTRA_SERVER_URL).orEmpty()
-                startListening(server)
+                val engine = intent.getStringExtra(EXTRA_STT_ENGINE) ?: ENGINE_WHISPER
+                startListening(server, engine)
                 return START_STICKY
             }
         }
         return START_NOT_STICKY
     }
 
-    private fun startListening(serverUrl: String) {
+    private fun startListening(serverUrl: String, engine: String) {
         if (pipelineJob != null) return  // already running
 
         createNotificationChannel()
@@ -79,7 +82,10 @@ class JarvisService : Service() {
         }
         ws = client
 
-        val speech = SystemStt(applicationContext)
+        val speech: SpeechToText = when (engine) {
+            ENGINE_SYSTEM -> SystemStt(applicationContext)
+            else -> WhisperStt(applicationContext)
+        }
         stt = speech
 
         pipelineJob = scope.launch {
@@ -205,6 +211,10 @@ class JarvisService : Service() {
         const val ACTION_START = "com.sixoffive.ao.jarvis.START"
         const val ACTION_STOP = "com.sixoffive.ao.jarvis.STOP"
         const val EXTRA_SERVER_URL = "server_url"
+        const val EXTRA_STT_ENGINE = "stt_engine"
+
+        const val ENGINE_WHISPER = "whisper"
+        const val ENGINE_SYSTEM = "system"
 
         private val _events = MutableSharedFlow<UiEvent>(
             extraBufferCapacity = 64,
@@ -212,10 +222,11 @@ class JarvisService : Service() {
         )
         val events: SharedFlow<UiEvent> = _events.asSharedFlow()
 
-        fun start(context: Context, serverUrl: String) {
+        fun start(context: Context, serverUrl: String, engine: String = ENGINE_WHISPER) {
             val intent = Intent(context, JarvisService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_SERVER_URL, serverUrl)
+                .putExtra(EXTRA_STT_ENGINE, engine)
             context.startForegroundService(intent)
         }
 

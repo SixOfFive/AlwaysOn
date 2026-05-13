@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.sixoffive.ao.jarvis"
     compileSdk = 35
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.sixoffive.ao.jarvis"
@@ -18,6 +19,25 @@ android {
         ndk {
             // 64-bit only. Tablets and phones from the last several years.
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17 -fexceptions -frtti"
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DWHISPER_BUILD_TESTS=OFF",
+                    "-DWHISPER_BUILD_EXAMPLES=OFF",
+                    "-DGGML_OPENMP=OFF",
+                )
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
@@ -45,6 +65,9 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    // ggml-small.en.bin is downloaded at runtime, not bundled.
+    // silero_vad.onnx is small and shipped as an asset.
 }
 
 dependencies {
@@ -62,4 +85,7 @@ dependencies {
 
     // WebSocket client to jarvis-server
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // ONNX Runtime for Silero VAD (and any future small models)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
 }

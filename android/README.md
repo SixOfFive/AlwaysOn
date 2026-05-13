@@ -1,20 +1,24 @@
 # jarvis-android
 
 Companion to the Windows client. Same wire protocol, same `Jarvis` trigger
-phrase, same server.
+phrase, same server. Same Whisper engine.
 
 ## Stack
 
 - Kotlin native, min SDK 31 (Android 12), target SDK 35 (Android 15)
-- Mic always-on via a foreground `Service` with persistent notification
-- On-device STT via Android's `SpeechRecognizer` (offline if you have the
-  language pack installed)
+- Mic always-on (real continuous capture, not a recognizer loop) via a
+  foreground `Service` with persistent notification
+- `AudioRecord` 16 kHz mono PCM → Silero VAD (ONNX Runtime) → whisper.cpp
+  via JNI for the actual transcription
 - `OkHttp` WebSocket → jarvis-server
 - Android `TextToSpeech` for the spoken reply
 
-The architecture deliberately puts STT behind a `SpeechToText` interface
-so we can swap in a `whisper.cpp` JNI implementation later for
-guaranteed-offline transcription on phones without an offline pack.
+The Whisper GGML model (`ggml-small.en.bin`, ~244 MB) downloads on first
+start from Hugging Face into the app's private files dir. The Silero VAD
+ONNX file is small (~2 MB) and ships as an asset.
+
+`SystemStt` (Android `SpeechRecognizer`) is still available as a fallback —
+pass `ENGINE_SYSTEM` to `JarvisService.start()` if you ever want it.
 
 ## Open in Android Studio
 
@@ -35,16 +39,16 @@ Either:
    gradlew installDebug
    ```
 
-## Make STT fully on-device
+## STT is fully on-device
 
-Android's `SpeechRecognizer` defaults to network if no offline pack is
-installed. Once-per-device:
+`AudioRecord` + `silero-vad.onnx` + `whisper.cpp`. No cloud, no Google
+service dependency. The first time you tap **Start listening**, the app
+will download the Whisper model (~244 MB) from Hugging Face. After that
+it's offline.
 
-> Settings → System → Languages → Voice → Offline speech recognition →
-> tap **+** → choose **English (US)** → Download.
-
-Some devices show "On-device recognition" instead — same idea.
-Pixel-family phones usually have it pre-installed.
+If you want a faster but less accurate model, edit
+`stt/ModelStore.kt:DEFAULT_MODEL` — options on huggingface.co/ggerganov/whisper.cpp
+include `tiny.en`, `base.en`, `small.en`, `medium.en`.
 
 ## Use
 
@@ -61,14 +65,13 @@ caught, so you can see what it's hearing.
 
 ## What's missing vs the Windows client
 
-- **Whisper-quality STT.** Android's recognizer is good but not as
-  consistent as `faster-whisper`. Whisper via whisper.cpp JNI is the
-  planned upgrade.
-- **Wake-word model.** No openWakeWord on phone (would need a tiny
-  ONNX-friendly trigger; Picovoice is the obvious commercial path).
-- **Battery.** Always-on listening + background service drains faster
-  than you'd expect — figure 10–20% per hour of active listening on
-  recent phones. Tap **Stop** when you're done.
+- **Wake-word model.** Same `Jarvis` trigger phrase, but it fires *after*
+  Whisper transcribes — there's no cheap always-on detector ahead of it.
+  Real wake-word on phone needs a separate small ONNX (or Picovoice
+  Porcupine).
+- **Battery.** Whisper on CPU + always-on mic drains faster than you'd
+  expect — figure 10–20% per hour of active listening on recent phones.
+  Tap **Stop** when you're done.
 
 ## Layout
 
@@ -78,17 +81,28 @@ android/
 ├── build.gradle.kts
 ├── gradle.properties
 └── app/
-    ├── build.gradle.kts
+    ├── build.gradle.kts            # NDK + CMake + onnxruntime-android
     ├── proguard-rules.pro
     └── src/main/
         ├── AndroidManifest.xml
+        ├── assets/silero_vad.onnx  # ~2 MB, bundled
+        ├── cpp/
+        │   ├── CMakeLists.txt      # FetchContent for whisper.cpp v1.7.4
+        │   └── whisper_jni.cpp     # init / transcribe / free
         ├── res/                    # layouts, theme, icons, strings
         └── java/com/sixoffive/ao/jarvis/
-            ├── MainActivity.kt     # UI: server URL, start/stop, transcript log
-            ├── JarvisService.kt    # foreground service, mic notification
+            ├── MainActivity.kt     # UI: server URL, start/stop, transcript log,
+            │                         # model download progress
+            ├── JarvisService.kt    # foreground service, owns the pipeline
+            ├── audio/
+            │   ├── AudioCapture.kt # AudioRecord 16kHz mono continuous
+            │   └── VadSegmenter.kt # Silero VAD via ORT, emits speech segments
             ├── stt/
             │   ├── SpeechToText.kt # interface
-            │   └── SystemStt.kt    # Android SpeechRecognizer impl
+            │   ├── WhisperStt.kt   # default: audio + VAD + whisper.cpp JNI
+            │   ├── WhisperNative.kt# external fun declarations
+            │   ├── SystemStt.kt    # fallback: Android SpeechRecognizer
+            │   └── ModelStore.kt   # downloads ggml-*.bin from huggingface.co
             ├── trigger/Trigger.kt  # regex for "jarvis"
             ├── net/
             │   ├── Messages.kt     # @Serializable mirrors of the protocol

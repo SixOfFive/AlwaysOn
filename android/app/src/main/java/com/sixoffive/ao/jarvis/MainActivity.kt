@@ -13,6 +13,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.sixoffive.ao.jarvis.databinding.ActivityMainBinding
+import com.sixoffive.ao.jarvis.stt.ModelStore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -21,8 +24,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: SharedPreferences
+    private lateinit var modelStore: ModelStore
 
     private var listening = false
+    private var downloadJob: Job? = null
     private val transcriptLog = StringBuilder()
     private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
@@ -32,7 +37,7 @@ class MainActivity : AppCompatActivity() {
         val ok = (granted[Manifest.permission.RECORD_AUDIO] == true) &&
                 (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                         granted[Manifest.permission.POST_NOTIFICATIONS] == true)
-        if (ok) startListening()
+        if (ok) ensureModelThenStart()
         else appendLine("permissions denied — can't start listening")
     }
 
@@ -41,6 +46,8 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         prefs = getSharedPreferences("jarvis", MODE_PRIVATE)
+        modelStore = ModelStore(this)
+
         binding.serverUrl.setText(prefs.getString(KEY_SERVER, ""))
         binding.transcript.movementMethod = ScrollingMovementMethod()
 
@@ -54,7 +61,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.status.text = "idle"
+        binding.status.text = if (modelStore.isCached(ModelStore.DEFAULT_MODEL))
+            "idle (model ready)"
+        else
+            "idle (will download model on first start)"
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -82,8 +92,34 @@ class MainActivity : AppCompatActivity() {
         val missing = needed.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isEmpty()) startListening()
+        if (missing.isEmpty()) ensureModelThenStart()
         else requestPerms.launch(missing.toTypedArray())
+    }
+
+    private fun ensureModelThenStart() {
+        val name = ModelStore.DEFAULT_MODEL
+        if (modelStore.isCached(name)) {
+            startListening()
+            return
+        }
+        // Need to download first. Block the Start button until done.
+        binding.startStop.isEnabled = false
+        binding.status.text = "downloading ggml-$name.bin…"
+        downloadJob?.cancel()
+        downloadJob = lifecycleScope.launch {
+            modelStore.download(name)
+                .catch { exc ->
+                    binding.status.text = "model download failed: ${exc.message}"
+                    binding.startStop.isEnabled = true
+                }
+                .collect { pct ->
+                    binding.status.text = "downloading ggml-$name.bin… $pct%"
+                    if (pct >= 100) {
+                        binding.startStop.isEnabled = true
+                        startListening()
+                    }
+                }
+        }
     }
 
     private fun startListening() {

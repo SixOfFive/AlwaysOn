@@ -38,6 +38,9 @@ models/
 recordings/
 *.wav
 
+# Bundled assets we DO want in the repo
+!android/app/src/main/assets/*.onnx
+
 # Logs
 *.log
 logs/
