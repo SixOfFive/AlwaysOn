@@ -15,8 +15,12 @@ from jarvis_server.session import Session
 from jarvis_server.stt import STT
 from jarvis_server.tools import ToolRegistry
 from jarvis_server.tools.builtin import builtin_tools
+from jarvis_server.tools.notes import notes_tools
+from jarvis_server.tools.timer import timer_tools
 from jarvis_server.tools.vault import VaultClient, vault_tools
 from jarvis_server.tools.weather import weather_tools
+from jarvis_server.tools.wikipedia import wikipedia_tools
+from jarvis_server.tools.wol import wol_tools
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +41,14 @@ def create_app(config: Config | None = None) -> FastAPI:
         for tool in builtin_tools():
             registry.register(tool)
         for tool in weather_tools():
+            registry.register(tool)
+        for tool in timer_tools():
+            registry.register(tool)
+        for tool in notes_tools():
+            registry.register(tool)
+        for tool in wikipedia_tools():
+            registry.register(tool)
+        for tool in wol_tools():
             registry.register(tool)
 
         vault: VaultClient | None = None

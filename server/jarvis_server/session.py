@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from jarvis_server.active_session import ActiveSession
 from jarvis_server.router import Router
 from jarvis_server.stt import STT
 from jarvis_shared import (
@@ -50,9 +51,12 @@ class Session:
     async def run(self) -> None:
         try:
             await self._handshake()
+            ActiveSession.set(self)
             await self._main_loop()
         except WebSocketDisconnect:
             log.info("client disconnected: %s", self.client_id)
+        finally:
+            ActiveSession.clear(self)
 
     async def _handshake(self) -> None:
         raw = await asyncio.wait_for(self.ws.receive_text(), timeout=5.0)
