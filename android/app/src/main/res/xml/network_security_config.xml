@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- LAN-only voice assistant: allow plaintext WS/HTTP everywhere so we
+         can hit `ws://192.168.x.y:7333/ws` without TLS certs on the server.
+         For a production / WAN-exposed deployment we'd point only the
+         specific server hostname here and TLS the rest. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
