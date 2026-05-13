@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -29,7 +30,14 @@ class VaultClient:
     """Long-lived MCP client over stdio to the obsidian-vault server."""
 
     def __init__(self, command: str, args: list[str]) -> None:
-        self._params = StdioServerParameters(command=command, args=args)
+        # MCP framing is UTF-8 over stdio. On Windows, Python subprocesses
+        # default to the system codepage (cp1252), so any non-ASCII char
+        # the vault server emits — em-dash, smart quote, anything — corrupts
+        # the frame. PYTHONUTF8=1 forces UTF-8 mode for the child Python.
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        self._params = StdioServerParameters(command=command, args=args, env=env)
         self._stack = AsyncExitStack()
         self._session: ClientSession | None = None
         self._lock = asyncio.Lock()

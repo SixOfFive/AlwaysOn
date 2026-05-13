@@ -45,8 +45,15 @@ def create_app(config: Config | None = None) -> FastAPI:
                 await vault.start()
                 for tool in vault_tools(vault):
                     registry.register(tool)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("vault MCP failed to start (%s); continuing without it", exc)
+            except BaseException as exc:
+                # Catch BaseException so a CancelledError or ExceptionGroup
+                # raised by the MCP TaskGroup doesn't tank the whole server.
+                log.warning("vault MCP failed to start (%s: %s); continuing without it",
+                            type(exc).__name__, exc)
+                try:
+                    await vault.close()
+                except BaseException:
+                    pass
                 vault = None
 
         claude = ClaudeRouter.try_create(registry, model=cfg.claude_model)
