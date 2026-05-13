@@ -124,7 +124,13 @@ class WhisperStt(
         // CancellationException — in which case the lines below would never
         // run and a finished transcript would be silently dropped. tryEmit
         // is non-suspending so it completes synchronously inside the block.
-        withContext(Dispatchers.Default) {
+        // Run whisper on Dispatchers.IO, not Default. The audio capture +
+        // VAD loop lives on Default; if transcribe also ran there it would
+        // compete for the same handful of worker threads and starve audio
+        // processing, which is what surfaces as "the mic freezes during
+        // transcription". IO has a much larger pool so the two pipelines
+        // can run truly in parallel.
+        withContext(Dispatchers.IO) {
             val listener = onProgress?.let {
                 object : WhisperNative.Listener {
                     override fun onProgress(percent: Int) { it(percent) }
@@ -136,7 +142,10 @@ class WhisperStt(
                 WhisperNative.nativeTranscribe(
                     handle,
                     audio,
-                    /* nThreads = */ Runtime.getRuntime().availableProcessors().coerceAtMost(4),
+                    // Cap internal whisper threads at 2. With 4 the worker
+                    // threads saturate every core on a phone and the audio
+                    // thread + VAD can't get scheduled.
+                    /* nThreads = */ Runtime.getRuntime().availableProcessors().coerceAtMost(2),
                     language,
                     listener,
                 )
