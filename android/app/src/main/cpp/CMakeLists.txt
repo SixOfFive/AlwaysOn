@@ -39,9 +39,12 @@ set(BUILD_SHARED_LIBS      OFF CACHE BOOL "" FORCE)
 # -DJARVIS_ENABLE_VULKAN=ON via gradle.
 option(JARVIS_ENABLE_VULKAN "Enable ggml Vulkan backend" OFF)
 if(JARVIS_ENABLE_VULKAN)
-    set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+    set(GGML_VULKAN ON  CACHE BOOL "" FORCE)
     message(STATUS "ggml Vulkan backend: enabled")
 else()
+    # FORCE the OFF — a stale CMakeCache.txt from a previous build where
+    # we tried Vulkan still contains GGML_VULKAN=ON otherwise.
+    set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
     message(STATUS "ggml Vulkan backend: disabled (CPU only)")
 endif()
 
