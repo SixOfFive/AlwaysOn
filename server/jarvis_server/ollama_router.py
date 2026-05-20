@@ -90,6 +90,14 @@ class OllamaRouter:
         history_prefix_len = len(conversation.messages)
         del user_text  # already in conversation.messages — kept as parameter for API clarity
 
+        # The chat call can fail with 404 "model not found" if someone
+        # ran `ollama rm <tag>` while the server was up, or if Ollama
+        # was restarted and lost its keep_alive state then evicted the
+        # model. We try once to re-pull and retry the call before
+        # giving up. Tracked per-`ask` call so a transient failure
+        # doesn't loop forever.
+        recovered = False
+
         for i in range(self.max_iter):
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": self.system_prompt},
@@ -127,6 +135,41 @@ class OllamaRouter:
                     f"future picks. Restart the server to load a smaller "
                     f"model."
                 )
+                conversation.add_assistant_text(fail)
+                return fail
+            except httpx.HTTPStatusError as exc:
+                # Ollama returns 404 with `{"error": "model '...' not found"}`
+                # when the manifest is missing — typically because someone
+                # ran `ollama rm <tag>` while we were up. Re-pull once and
+                # retry the same chat turn so the user doesn't see an error.
+                if (
+                    not recovered
+                    and exc.response is not None
+                    and exc.response.status_code == 404
+                    and "not found" in (exc.response.text or "").lower()
+                ):
+                    log.warning(
+                        "ollama 404 for %s at %s — model went missing, "
+                        "re-pulling and retrying",
+                        self.model, self.base_url,
+                    )
+                    recovered = True
+                    try:
+                        await ensure_pulled(self.base_url, self.model)
+                    except Exception as pull_exc:  # noqa: BLE001
+                        log.exception("recovery pull failed")
+                        fail = (
+                            f"The local model went missing and I couldn't "
+                            f"re-pull it: {pull_exc}"
+                        )
+                        conversation.add_assistant_text(fail)
+                        return fail
+                    # `continue` lets the for-loop run another iteration
+                    # with the freshly-pulled model. Costs one of the
+                    # max_iter slots (default 5), well within budget.
+                    continue
+                log.exception("ollama call failed")
+                fail = f"The local model didn't respond: {exc}"
                 conversation.add_assistant_text(fail)
                 return fail
             except httpx.HTTPError as exc:
@@ -196,18 +239,28 @@ async def ensure_pulled(
     model: str,
     *,
     timeout: float = 60.0 * 30,  # large models can take a while
+    skip_warm_load: bool = False,
 ) -> None:
-    """Make sure Ollama has the given model locally. If not, pull it,
-    streaming progress logs. Then warm-load it into VRAM with
-    keep_alive=-1 so the first user utterance doesn't pay a cold-load."""
+    """Make sure Ollama at `base_url` has `model` locally. If not, pull
+    it (streaming progress logs). Then warm-load it into VRAM with
+    keep_alive=-1 so the first user utterance doesn't pay a cold-load.
+
+    Endpoint URL is included in every log line so multi-host setups can
+    tell which Ollama is doing what.
+
+    `skip_warm_load=True` is for the mid-session auto-recovery path —
+    the next /api/chat will load the model implicitly, and the recovery
+    flow re-issues that chat call right away.
+    """
     base = base_url.rstrip("/")
     async with httpx.AsyncClient(timeout=timeout) as client:
         # /api/show 200 = present, 404 = need to pull.
         show = await client.post(f"{base}/api/show", json={"name": model})
         if show.status_code == 200:
-            log.info("ollama model already present: %s", model)
+            log.info("ollama model present at %s: %s", base, model)
         elif show.status_code == 404:
-            log.info("pulling ollama model: %s (this may take a while)", model)
+            log.info("pulling ollama model from %s: %s (this may take a while)",
+                     base, model)
             async with client.stream(
                 "POST", f"{base}/api/pull",
                 json={"name": model, "stream": True},
@@ -231,21 +284,25 @@ async def ensure_pulled(
                             last_pct = pct
                     elif status:
                         log.info("pull %s: %s", model, status)
-            log.info("pull complete: %s", model)
+            log.info("pull complete at %s: %s", base, model)
         else:
             show.raise_for_status()
+
+        if skip_warm_load:
+            return
 
         # Warm-load: a no-op generate with empty prompt is enough to
         # force the weights into VRAM. keep_alive=-1 pins them there
         # so subsequent /api/chat calls hit a hot model.
-        log.info("warm-loading %s into VRAM (keep_alive=-1)", model)
+        log.info("warm-loading %s at %s into VRAM (keep_alive=-1)", model, base)
         try:
             r = await client.post(
                 f"{base}/api/generate",
                 json={"model": model, "prompt": "", "keep_alive": -1, "stream": False},
             )
             r.raise_for_status()
-            log.info("ollama model resident: %s", model)
+            log.info("ollama model resident at %s: %s", base, model)
         except httpx.HTTPError as exc:
             # Non-fatal: the first real request will load instead.
-            log.warning("warm-load failed (%s); first request will be cold", exc)
+            log.warning("warm-load failed at %s (%s); first request will be cold",
+                        base, exc)

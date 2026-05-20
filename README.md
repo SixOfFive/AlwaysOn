@@ -363,7 +363,7 @@ to avoid backslash-escape headaches: `notes_dir = 'C:\Users\me\Obsidian\Inbox'`.
 **Move Ollama to another box**
 ```toml
 [ollama]
-url = "http://192.168.15.103:11434"
+url = "http://<ollama-host>:11434"
 ```
 
 **Land notes + dictation logs in Obsidian** (the daily files get
@@ -416,17 +416,53 @@ device = "cpu"
 compute_type = "int8"
 ```
 
+### Model availability
+
+At startup the server calls `ensure_pulled(base_url, model)` against the
+configured Ollama endpoint. The flow:
+
+1. `POST /api/show` — manifest check. If 200, the model is present.
+2. If 404, stream `POST /api/pull` and log progress every 10 %.
+3. Either way, `POST /api/generate` with an empty prompt + `keep_alive: -1`
+   to force the weights into VRAM and pin them there.
+
+Every log line names the endpoint so multi-host setups can tell which
+Ollama is doing what. In the snippets below, replace `<ollama-host>`
+with your real address — the public README ships a placeholder
+intentionally (your LAN topology is yours, not the repo's).
+
+```
+[server] INFO jarvis_server.ollama_router — ollama model present at http://<ollama-host>:11434: <tag>
+[server] INFO jarvis_server.ollama_router — warm-loading <tag> at http://<ollama-host>:11434 into VRAM (keep_alive=-1)
+[server] INFO jarvis_server.ollama_router — ollama model resident at http://<ollama-host>:11434: <tag>
+```
+
 ### Ollama model stays resident
 
-The server passes `keep_alive: -1` on every chat call and does a
-warm-load right after `ensure_pulled`, so the model lives in VRAM
-permanently — no eviction after 5 min of idle, no cold-load latency
-on the first utterance of the day. Look for the line
-`ollama model resident: <tag>` in the startup log.
+The server passes `keep_alive: -1` on every chat call and does the
+warm-load above right after `ensure_pulled`, so the model lives in
+VRAM permanently — no eviction after 5 min of idle, no cold-load
+latency on the first utterance of the day.
 
-If you ever need to swap models mid-session (e.g. via
-`JARVIS_OLLAMA_MODEL`), restart the server: there's no graceful
-"unload the previous model" hook because we never want one.
+### Mid-session auto-recovery
+
+If someone runs `ollama rm <tag>` (or Ollama restarts and drops the
+model) while AO is up, the next `/api/chat` returns `404 model not
+found`. `OllamaRouter.ask` detects that, calls `ensure_pulled` again
+to re-pull, and retries the same turn. The user sees a normal reply
+(with a one-time pull delay) instead of an error. Logs:
+
+```
+[server] WARNING jarvis_server.ollama_router — ollama 404 for <tag> at http://<ollama-host>:11434 — model went missing, re-pulling and retrying
+[server] INFO jarvis_server.ollama_router — pulling ollama model from http://<ollama-host>:11434: <tag> (this may take a while)
+...
+```
+
+One recovery attempt per `ask` call — a persistent failure surfaces
+as a normal error reply, no loops. If you ever need to swap models
+mid-session (e.g. via `JARVIS_OLLAMA_MODEL`), restart the server:
+there's no graceful "unload the previous model" hook because we
+never want one.
 
 ### Model banlist
 
